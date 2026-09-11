@@ -1,0 +1,2874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BridgeThings Sentinel — Console</title>
+<style>
+/* ─────────────────────────────────────────────────────────────────────────
+   Palette. Light and dark are both selected sets — the dark column is the
+   same hues re-stepped for a dark surface, not an automatic inversion.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --surface-0:#f4f4f2; --surface-1:#fcfcfb; --surface-2:#efeeea;
+  --border:#dcdbd5; --border-strong:#c2c1b9;
+  --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#7c7b75;
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a;
+  --seq-450:#2a78d6; --seq-600:#184f95;
+  --good:#008300; --warn:#eda100; --crit:#e34948;
+  --shadow:0 1px 2px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-0:#111110; --surface-1:#1a1a19; --surface-2:#242422;
+    --border:#33332f; --border-strong:#4a4a45;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8f8e85;
+    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70;
+    --seq-450:#3987e5; --seq-600:#86b6ef;
+    --good:#3ba55d; --warn:#c98500; --crit:#e66767;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0:#111110; --surface-1:#1a1a19; --surface-2:#242422;
+  --border:#33332f; --border-strong:#4a4a45;
+  --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8f8e85;
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70;
+  --seq-450:#3987e5; --seq-600:#86b6ef;
+  --good:#3ba55d; --warn:#c98500; --crit:#e66767;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--surface-0);color:var(--text-primary);
+  font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:14px;max-width:1200px;margin:0 auto}
+h1{font-size:17px;font-weight:650;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;
+   color:var(--text-secondary);margin-bottom:10px}
+h3{font-size:13px;font-weight:650;margin:14px 0 6px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+     background:var(--surface-2);padding:1px 5px;border-radius:4px}
+
+header{display:flex;flex-wrap:wrap;gap:9px;align-items:center;
+  margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.sub{color:var(--text-muted);font-size:12px}
+.spacer{flex:1 1 auto}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
+  border-radius:999px;font-size:12px;font-weight:600;background:var(--surface-2);
+  color:var(--text-secondary);border:1px solid var(--border)}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted)}
+.badge.on{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.badge.on .dot{background:var(--good)}
+
+button{font:inherit;font-weight:600;font-size:13px;padding:7px 13px;border-radius:7px;
+  border:1px solid var(--border-strong);background:var(--surface-1);
+  color:var(--text-primary);cursor:pointer;transition:.12s}
+button:hover:not(:disabled){background:var(--surface-2)}
+button:disabled{opacity:.42;cursor:not-allowed}
+button.primary{background:var(--series-1);border-color:var(--series-1);color:#fff}
+button.primary:hover:not(:disabled){filter:brightness(1.08)}
+button.danger{border-color:var(--crit);color:var(--crit)}
+button.sm{padding:4px 9px;font-size:12px}
+
+/* ─── Tabs ───────────────────────────────────────────────────────────────
+   A deployment console is used in four distinct sittings — commissioning a
+   node, tuning its trigger, checking its data, and diagnosing a fault — and
+   showing all of it at once buries whichever one you are in. */
+nav.tabs{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:14px;
+  border-bottom:1px solid var(--border)}
+nav.tabs button{border:none;background:none;border-radius:7px 7px 0 0;
+  padding:8px 14px;color:var(--text-secondary);font-weight:600;
+  border-bottom:2px solid transparent;margin-bottom:-1px}
+nav.tabs button:hover{background:var(--surface-2)}
+nav.tabs button[aria-selected="true"]{color:var(--series-1);
+  border-bottom-color:var(--series-1);background:none}
+section[role=tabpanel][hidden]{display:none}
+
+.grid{display:grid;gap:13px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  margin-bottom:13px}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:11px;
+  padding:15px;box-shadow:var(--shadow)}
+.card.wide{grid-column:1/-1}
+
+.tiles{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
+.tile{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+  padding:10px 12px}
+.tile .k{font-size:11px;color:var(--text-muted);text-transform:uppercase;
+  letter-spacing:.05em;margin-bottom:3px}
+.tile .v{font-size:20px;font-weight:650;letter-spacing:-.02em;
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.tile .u{font-size:11px;font-weight:500;color:var(--text-muted);margin-left:2px}
+
+.kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
+  border-bottom:1px solid var(--border);font-size:13px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--text-secondary)}
+.kv .v{font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums;font-weight:600}
+
+.chart-wrap{overflow-x:auto}
+svg{display:block;max-width:100%}
+.axis-line{stroke:var(--border-strong);stroke-width:1}
+.grid-line{stroke:var(--border);stroke-width:1;stroke-dasharray:2 3}
+.tick{fill:var(--text-muted);font-size:10px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.axis-title{fill:var(--text-secondary);font-size:11px;font-weight:600}
+.bar{fill:var(--seq-450)}
+.bar:hover{fill:var(--seq-600)}
+.bar-hit{fill:transparent;cursor:pointer}
+.empty-note{fill:var(--text-muted);font-size:12px}
+
+#tooltip{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:var(--surface-1);border:1px solid var(--border-strong);border-radius:7px;
+  padding:7px 10px;font-size:12px;box-shadow:var(--shadow);z-index:50;white-space:nowrap}
+#tooltip .tt-k{color:var(--text-muted)}
+#tooltip .tt-v{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:650}
+
+table{border-collapse:collapse;width:100%;font-size:12px;margin-top:8px}
+th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--border);
+      vertical-align:top}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text-secondary);font-weight:650;font-size:11px;
+   text-transform:uppercase;letter-spacing:.04em}
+td{font-family:ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+td.doc{font-family:inherit;text-align:left;color:var(--text-secondary);
+       font-size:12px;line-height:1.45;max-width:430px}
+
+.cfg-row{display:grid;grid-template-columns:1fr 118px auto;gap:8px;
+  align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.cfg-row:last-child{border-bottom:none}
+.cfg-row label{font-size:13px;color:var(--text-secondary)}
+.cfg-row .rng{font-size:11px;color:var(--text-muted);white-space:nowrap}
+input[type=text],input[type=number],select{font:inherit;font-size:13px;
+  padding:5px 8px;border-radius:6px;border:1px solid var(--border-strong);
+  background:var(--surface-0);color:var(--text-primary);width:100%;
+  font-family:ui-monospace,Menlo,Consolas,monospace}
+input:focus,select:focus{outline:2px solid var(--series-1);outline-offset:-1px}
+
+#log{height:300px;overflow-y:auto;background:var(--surface-0);
+  border:1px solid var(--border);border-radius:8px;padding:9px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55}
+#log div{white-space:pre-wrap;word-break:break-all}
+.l-tx{color:var(--series-1)} .l-rx{color:var(--text-primary)}
+.l-err{color:var(--crit)} .l-info{color:var(--text-muted)}
+.term-in{display:flex;gap:8px;margin-top:9px}
+.notice{background:var(--surface-2);border-left:3px solid var(--warn);
+  padding:9px 12px;border-radius:0 7px 7px 0;font-size:12.5px;
+  color:var(--text-secondary);margin-bottom:13px}
+.notice.info{border-left-color:var(--series-1)}
+.notice.good{border-left-color:var(--good)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ol.steps{margin:8px 0 0 20px;font-size:13px;color:var(--text-secondary);line-height:1.7}
+ol.steps b{color:var(--text-primary)}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>BridgeThings Sentinel&trade;</h1>
+    <div class="sub">Structural Health Monitoring Node &mdash; deployment console</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="badge" id="conn"><span class="dot"></span><span id="conn-t">Disconnected</span></span>
+  <button class="primary" id="btn-conn">Connect</button>
+  <button id="btn-disc" disabled>Disconnect</button>
+  <button id="btn-demo" title="Fill every panel with synthetic values, no hardware needed">Demo</button>
+  <button id="btn-theme" title="Light / dark">&#9681;</button>
+</header>
+
+<div class="notice" id="compat" hidden>
+  <b>Web Bluetooth unavailable.</b> Use Chrome or Edge on desktop or Android.
+  Safari and Firefox do not implement it. Opening this file directly
+  (<code>file://</code>) works &mdash; Chrome treats it as a secure context.
+</div>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="t-dash"  aria-selected="true">Dashboard</button>
+  <button role="tab" data-tab="t-comm"  aria-selected="false">Commissioning</button>
+  <button role="tab" data-tab="t-trig"  aria-selected="false">Trigger</button>
+  <button role="tab" data-tab="t-data"  aria-selected="false">Data</button>
+  <button role="tab" data-tab="t-cloud" aria-selected="false">Cloud</button>
+  <button role="tab" data-tab="t-diag"  aria-selected="false">Diagnostics</button>
+  <button role="tab" data-tab="t-cfg"   aria-selected="false">All settings</button>
+  <button role="tab" data-tab="t-term"  aria-selected="false">Terminal</button>
+</nav>
+
+<!-- ══════════════════════════ DASHBOARD ══════════════════════════ -->
+<section role="tabpanel" id="t-dash">
+  <div class="card wide" style="margin-bottom:13px">
+    <h2>Live state</h2>
+    <div class="tiles">
+      <div class="tile"><div class="k">Mode</div><div class="v" id="t-mode" style="font-size:14px">&mdash;</div></div>
+      <div class="tile"><div class="k">Load</div><div class="v"><span id="t-load">&mdash;</span><span class="u">kN</span></div></div>
+      <div class="tile"><div class="k">Detector</div><div class="v" id="t-det" style="font-size:14px">&mdash;</div></div>
+      <div class="tile"><div class="k">Temperature</div><div class="v"><span id="t-temp">&mdash;</span><span class="u">&deg;C</span></div></div>
+      <div class="tile"><div class="k">Battery</div><div class="v"><span id="t-batt">&mdash;</span><span class="u">mV</span></div></div>
+      <div class="tile"><div class="k">Pending</div><div class="v" id="t-pend">&mdash;</div></div>
+    </div>
+    <div class="row" style="margin-top:11px">
+      <button class="sm" id="btn-refresh">Refresh all</button>
+      <button class="sm" id="btn-live">Live poll: off</button>
+      <button class="sm" id="btn-upload">Upload now</button>
+      <button class="sm" id="btn-settime">Sync clock</button>
+      <button class="sm primary" id="btn-capture">Read sensor &amp; send</button>
+    </div>
+    <p class="hint">If the node reports busy, wait for capture or upload to finish,
+      then choose <b>Refresh all</b>. After an interrupted save, reconnect if needed
+      and use <b>Settings → Read from node</b> before retrying. Earlier values may
+      already have been applied.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Operating mode</h2>
+      <div class="cfg-row">
+        <label for="m-mode">Mode</label>
+        <select id="m-mode">
+          <option value="1">Monitoring &mdash; deployed</option>
+          <option value="0">Setup &mdash; commissioning</option>
+        </select>
+        <span class="rng" id="m-cur">&mdash;</span>
+      </div>
+      <div class="notice info" id="m-desc" style="margin:11px 0 0"></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-mode-set">Apply mode</button>
+        <button class="sm" id="btn-mode-get">Read</button>
+      </div>
+      <div class="sub" style="margin-top:8px">
+        Stored in NVM3 and restored on boot &mdash; a node left in Factory stays
+        there through a power cut.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Node</h2>
+      <div class="kv"><span class="k">Site</span><span class="v" id="d-site">&mdash;</span></div>
+      <div class="kv"><span class="k">Firmware</span><span class="v" id="d-fw">&mdash;</span></div>
+      <div class="kv"><span class="k">Board</span><span class="v" id="d-board">&mdash;</span></div>
+      <div class="kv"><span class="k">Uptime</span><span class="v" id="d-up">&mdash;</span></div>
+      <div class="kv"><span class="k">Node clock (IST)</span><span class="v" id="d-utc">&mdash;</span></div>
+      <div class="kv"><span class="k">Clock source</span><span class="v" id="t-timesrc">&mdash;</span></div>
+      <div class="kv"><span class="k">Reset cause</span><span class="v" id="d-rst">&mdash;</span></div>
+      <div class="kv"><span class="k">Watchdog resets</span><span class="v" id="d-wdt">&mdash;</span></div>
+    </div>
+    <div class="card">
+      <h2>Readiness</h2>
+      <div class="notice" id="r-verdict" style="margin:0 0 11px">
+        Connect to a node to check it.
+      </div>
+      <div class="kv"><span class="k">Load cell calibrated</span><span class="v" id="r-cal">&mdash;</span></div>
+      <div class="kv"><span class="k">Cloud provisioned</span><span class="v" id="r-cloud">&mdash;</span></div>
+      <div class="kv"><span class="k">Accelerometer</span><span class="v" id="r-accel">&mdash;</span></div>
+      <div class="kv"><span class="k">Monitoring armed</span><span class="v" id="r-armed">&mdash;</span></div>
+      <div class="kv"><span class="k">Sending regime</span><span class="v" id="r-regime">&mdash;</span></div>
+      <div class="kv"><span class="k">LTE signal (CSQ)</span><span class="v" id="d-rssi">&mdash;</span></div>
+      <div class="kv"><span class="k">Lifetime events</span><span class="v" id="d-ev">&mdash;</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ COMMISSIONING ══════════════════════════ -->
+<section role="tabpanel" id="t-comm" hidden>
+  <div class="notice info">
+    Do these in order. The cell specification defines what a reading
+    <em>means</em>; the calibration corrects it against reality. Changing the
+    specification afterwards clears the calibration, because the stored
+    correction was measured against the old numbers.
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>1 &middot; Identity</h2>
+      <div class="cfg-row">
+        <label for="c-site">Site label</label>
+        <input type="text" id="c-site" maxlength="15" placeholder="e.g. GDV-S3-N07">
+        <span class="rng">15 chars</span>
+      </div>
+      <div class="sub" style="margin-top:6px">
+        Free text, stored on the node. The cloud identifies the device by its
+        access token &mdash; this is so an engineer standing in front of 120
+        identical boxes knows which one they are talking to.
+      </div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-site">Save label</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2 &middot; Load cell specification</h2>
+      <div class="cfg-row">
+        <label for="c-cap">Rated capacity</label>
+        <input type="number" id="c-cap" step="any" min="0.001" max="100000">
+        <span class="rng">kN</span>
+      </div>
+      <div class="cfg-row">
+        <label for="c-mvv">Rated output</label>
+        <input type="number" id="c-mvv" step="any" min="0.1" max="100">
+        <span class="rng">mV/V</span>
+      </div>
+      <div class="cfg-row">
+        <label for="c-gain">PGA gain</label>
+        <select id="c-gain">
+          <option>1</option><option>8</option><option>16</option>
+          <option>32</option><option>64</option><option>128</option>
+        </select>
+        <span class="rng">128 typical</span>
+      </div>
+      <div class="cfg-row">
+        <label for="c-vref">Excitation</label>
+        <select id="c-vref">
+          <option value="0">3000 mV (this board&rsquo;s regulated reference)</option>
+          <option value="3300">3300 mV</option>
+          <option value="5000">5000 mV</option>
+          <option value="2500">2500 mV</option>
+        </select>
+        <span class="rng">display only &mdash; kN is ratiometric</span>
+      </div>
+      <div class="kv" style="margin-top:8px">
+        <span class="k">Full-scale differential</span><span class="v" id="c-fs">&mdash;</span>
+      </div>
+      <div class="kv"><span class="k">Span used of ADC range</span><span class="v" id="c-span-used">&mdash;</span></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm" id="btn-cell-rd">Read</button>
+        <button class="sm primary" id="btn-cell-wr">Apply</button>
+      </div>
+      <div class="sub" id="cell-note" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>3 &middot; Calibration</h2>
+    <div class="grid" style="margin-bottom:0">
+      <div>
+        <ol class="steps">
+          <li>With <b>only the dead load</b> on the structure, press
+              <b>Tare</b>. This records the zero point.</li>
+          <li>Apply a <b>known load</b> and let it settle.</li>
+          <li>Type that load in kN and press <b>Set span</b>.</li>
+        </ol>
+        <div class="notice" style="margin:12px 0 0">
+          Tare <em>before</em> span, never after. Span computed on an untared
+          reading folds the dead load into the scale factor: the cell then reads
+          correctly at exactly the calibration point and wrongly everywhere
+          else &mdash; and the one check most installers perform is at the
+          calibration point.
+        </div>
+      </div>
+      <div>
+        <div class="kv"><span class="k">Status</span><span class="v" id="k-valid">&mdash;</span></div>
+        <div class="kv"><span class="k">Zero (raw code)</span><span class="v" id="k-zero">&mdash;</span></div>
+        <div class="kv"><span class="k">Span factor</span><span class="v" id="k-span">&mdash;</span></div>
+        <div class="kv"><span class="k">Live reading</span><span class="v" id="k-live">&mdash;</span></div>
+        <div class="row" style="margin-top:12px">
+          <button class="sm" id="btn-tare">Tare</button>
+          <input type="number" id="k-known" step="any" placeholder="known kN"
+                 style="width:110px">
+          <button class="sm primary" id="btn-span">Set span</button>
+          <button class="sm danger" id="btn-calclr">Clear</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="sm" id="btn-stream">Live stream: off</button>
+          <span class="sub">2 Hz raw / &micro;V / kN &mdash; use it to watch a load settle</span>
+        </div>
+        <div class="sub" id="cal-note" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ TRIGGER ══════════════════════════ -->
+<section role="tabpanel" id="t-trig" hidden>
+
+ <div class="notice">
+   <b>How a threshold gets chosen.</b> The ADXL367 wakes this node when the deck
+   moves more than a set amount <i>away from how it normally sits</i> &mdash;
+   gravity and bracket tilt are removed in hardware, so the number below is a
+   <b>deviation</b>, not an absolute acceleration. Profile the quiet bridge,
+   profile a train, and the separation between the two peaks is what the
+   threshold sits in.
+ </div>
+
+ <div class="grid">
+   <div class="card">
+     <h2>Step 1 &mdash; Baseline the quiet bridge</h2>
+     <p class="sub">
+       Runs for the configured window with no train on the span. Learns the
+       site&rsquo;s resting orientation, stores it, and measures the idle noise
+       floor. <b>Required before the node will arm.</b>
+     </p>
+     <div class="row" style="margin-top:11px">
+       <button class="sm primary" id="btn-prof-base">Run baseline</button>
+       <span class="rng" id="p-base-state">&mdash;</span>
+     </div>
+     <div class="kv"><span class="k">Idle peak</span><span class="v" id="p-idle-peak">&mdash;</span></div>
+      <div class="kv"><span class="k">Idle per axis</span><span class="v" id="p-idle-ax">&mdash;</span></div>
+     <div class="kv"><span class="k">Reference stored</span><span class="v" id="p-ref">&mdash;</span></div>
+   </div>
+
+   <div class="card">
+     <h2>Step 2 &mdash; Profile a train</h2>
+     <p class="sub">
+       Start this as a train approaches. Measures the same quantity against the
+       same reference, so the two peaks are directly comparable.
+     </p>
+     <div class="row" style="margin-top:11px">
+       <button class="sm primary" id="btn-prof-train">Run train profile</button>
+       <button class="sm" id="btn-prof-stop">Stop</button>
+       <span class="rng" id="p-train-state">&mdash;</span>
+     </div>
+     <div class="kv"><span class="k">Train peak</span><span class="v" id="p-train-peak">&mdash;</span></div>
+      <div class="kv"><span class="k">Train per axis</span><span class="v" id="p-train-ax">&mdash;</span></div>
+      <div class="kv"><span class="k">Axes worth using</span><span class="v" id="p-axmask">&mdash;</span></div>
+     <div class="kv"><span class="k">Separation</span><span class="v" id="p-sep">&mdash;</span></div>
+   </div>
+ </div>
+
+ <div class="card" style="margin-top:14px">
+   <div class="row" style="justify-content:space-between;align-items:baseline">
+     <h2 id="chart-title">Per-second peak deviation</h2>
+     <div class="row">
+       <button class="sm" id="btn-show-base" aria-pressed="true">Baseline</button>
+       <button class="sm" id="btn-show-train" aria-pressed="false">Train</button>
+     </div>
+   </div>
+   <p class="sub" id="chart-sub">
+     Each bar is the largest deviation seen in that second &mdash; the same
+     quantity the ADXL367 compares against its threshold.
+   </p>
+
+   <div id="chart-wrap" style="overflow-x:auto;margin-top:10px">
+     <svg id="chart" role="img" aria-labelledby="chart-title" style="display:block"></svg>
+   </div>
+   <div id="chart-tip" role="status" aria-live="polite"
+        style="position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;
+               background:var(--surface-1);border:1px solid var(--border-strong);
+               border-radius:6px;padding:5px 8px;font-size:12px;box-shadow:var(--shadow);
+               color:var(--text-primary);z-index:50;white-space:nowrap"></div>
+
+   <details style="margin-top:10px">
+     <summary class="sub" style="cursor:pointer">Show as a table</summary>
+     <div style="overflow-x:auto;max-height:220px;margin-top:8px">
+       <table id="chart-table" style="border-collapse:collapse;font-size:12px;width:100%">
+         <thead><tr>
+           <th style="text-align:left;padding:3px 8px;color:var(--text-secondary)">Second</th>
+           <th style="text-align:right;padding:3px 8px;color:var(--text-secondary)">Peak (mg)</th>
+         </tr></thead>
+         <tbody></tbody>
+       </table>
+     </div>
+   </details>
+ </div>
+
+ <div class="grid" style="margin-top:14px">
+   <div class="card">
+     <h2>Step 3 &mdash; Apply the threshold</h2>
+     <div class="kv"><span class="k">Suggested</span><span class="v" id="p-suggest">&mdash;</span></div>
+     <div class="cfg-row">
+       <label for="w-act">Activity threshold</label>
+       <input id="w-act" type="number" step="0.1" min="10" max="2000">
+       <span class="rng">mg deviation &middot; 10&ndash;2000</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-inact">Quiet threshold</label>
+       <input id="w-inact" type="number" step="0.1" min="5" max="2000">
+       <span class="rng">mg &middot; must be below the activity threshold</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-acttime">Sustained for</label>
+       <input id="w-acttime" type="number" step="10" min="0" max="5000">
+       <span class="rng">ms &middot; filters single knocks</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-inacttime">Quiet for</label>
+       <input id="w-inacttime" type="number" step="100" min="200" max="10000">
+       <span class="rng">ms &middot; before the train counts as gone</span>
+     </div>
+     <div class="row" style="margin-top:11px">
+       <button class="sm primary" id="btn-prof-apply">Use suggested</button>
+       <button class="sm" id="btn-wake-save">Save trigger settings</button>
+     </div>
+   </div>
+
+   <div class="card">
+     <h2>Power and false wakes</h2>
+     <div class="cfg-row">
+       <label for="w-axmask">Detect on axes</label>
+        <select id="w-axmask">
+          <option value="0">All three (X Y Z)</option>
+          <option value="1">Y and Z (block X)</option>
+          <option value="2">X and Z (block Y)</option>
+          <option value="4">X and Y (block Z)</option>
+          <option value="3">Z only (block X, Y)</option>
+          <option value="5">Y only (block X, Z)</option>
+          <option value="6">X only (block Y, Z)</option>
+        </select>
+        <span class="rng">the part ORs whichever are enabled</span>
+      </div>
+      <div class="cfg-row">
+        <label for="w-autosleep">Autosleep</label>
+       <select id="w-autosleep">
+         <option value="1">On &mdash; part drops to wake-up mode when quiet</option>
+         <option value="0">Off &mdash; stay in measurement mode</option>
+       </select>
+       <span class="rng">on is ~180 nA idle; off is ~1 &micro;A</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-confirm">Wake re-check</label>
+       <input id="w-confirm" type="number" step="50" min="0" max="5000">
+       <span class="rng">ms &middot; 0 trusts the hardware</span>
+     </div>
+     <p class="sub" style="margin-top:8px">
+       In wake-up mode the ADXL367 triggers on a <b>single sample</b> &mdash; the
+       sustained-motion filter does not apply there. The MCU therefore re-checks
+       for this long before powering the load cell. A capture costs seconds and
+       a modem session; this costs milliseconds.
+     </p>
+     <div class="kv"><span class="k">Rejected wakes</span><span class="v" id="w-false">&mdash;</span></div>
+      <div class="kv"><span class="k">Self-repairs</span><span class="v" id="w-repairs">&mdash;</span></div>
+      <div class="kv"><span class="k">Re-arms after a wake</span><span class="v" id="w-retrig">&mdash;</span></div>
+      <div class="kv"><span class="k">Last self-check</span><span class="v" id="w-health">&mdash;</span></div>
+      <div class="cfg-row">
+        <label for="w-healthint">Self-check every</label>
+        <input id="w-healthint" type="number" step="10" min="0" max="3600">
+        <span class="rng">s &middot; 0 disables it</span>
+      </div>
+      <p class="sub" style="margin-top:8px">
+        The ADXL367 waits for an inactivity event after each train. If the deck
+        never settles below the quiet threshold &mdash; wind, road traffic, a
+        following train &mdash; it stays asserted and <b>no further train
+        produces an interrupt</b>. The node checks its own wake path on this
+        interval and re-arms if it finds that state, or if the part&rsquo;s
+        registers have drifted. It never runs during a capture or an upload.
+      </p>
+     <div class="kv"><span class="k">Armed</span><span class="v" id="w-armed">&mdash;</span></div>
+     <div class="kv"><span class="k">Accelerometer</span><span class="v" id="w-accel-state">&mdash;</span></div>
+   </div>
+
+   <div class="card">
+     <h2>Profile run lengths</h2>
+     <div class="cfg-row">
+       <label for="w-pbase">Baseline window</label>
+       <input id="w-pbase" type="number" step="5" min="10" max="120">
+       <span class="rng">s &middot; a minute lets wind and road traffic show up</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-ptrain">Train window</label>
+       <input id="w-ptrain" type="number" step="5" min="5" max="120">
+       <span class="rng">s &middot; long enough for the slowest freight</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-arate">Accelerometer rate</label>
+       <input id="w-arate" type="number" step="1" min="12" max="100">
+       <span class="rng">Hz &middot; 12&ndash;100</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-timeout">Capture timeout</label>
+       <input id="w-timeout" type="number" step="5" min="5" max="300">
+       <span class="rng">s &middot; hard stop on one capture</span>
+     </div>
+   </div>
+ </div>
+</section>
+
+<section role="tabpanel" id="t-data" hidden>
+  <div class="grid">
+    <div class="card">
+      <h2>Most recent event</h2>
+      <div class="kv"><span class="k">Timestamp (IST)</span><span class="v" id="e-ts">&mdash;</span></div>
+      <div class="kv"><span class="k">Kind</span><span class="v" id="e-kind">&mdash;</span></div>
+      <div class="kv"><span class="k">Duration</span><span class="v" id="e-dur">&mdash;</span></div>
+      <div class="kv"><span class="k">Peak load</span><span class="v" id="e-pl">&mdash;</span></div>
+      <div class="kv"><span class="k">Mean load</span><span class="v" id="e-al">&mdash;</span></div>
+      <div class="kv"><span class="k">RMS load</span><span class="v" id="e-rl">&mdash;</span></div>
+      <div class="kv"><span class="k">Peak acceleration</span><span class="v" id="e-pa">&mdash;</span></div>
+      <div class="kv"><span class="k">RMS acceleration</span><span class="v" id="e-ra">&mdash;</span></div>
+      <div class="kv"><span class="k">Rainflow cycles</span><span class="v" id="e-cyc">&mdash;</span></div>
+      <div class="kv"><span class="k">Flags</span><span class="v" id="e-flags">&mdash;</span></div>
+      <div class="row" style="margin-top:11px"><button class="sm" id="btn-event">Read</button></div>
+    </div>
+    <div class="card">
+      <h2>Fatigue summary</h2>
+      <div class="kv"><span class="k">Miner damage</span><span class="v" id="f-dmg">&mdash;</span></div>
+      <div class="kv"><span class="k">Total cycles</span><span class="v" id="f-tot">&mdash;</span></div>
+      <div class="kv"><span class="k">Largest bin</span><span class="v" id="f-max">&mdash;</span></div>
+      <div class="kv"><span class="k">Curve calibrated</span><span class="v" id="f-cal">&mdash;</span></div>
+      <div class="sub" id="f-hint" style="margin-top:8px"></div>
+
+      <h2 style="margin-top:14px">S&ndash;N curve</h2>
+      <div class="cfg-row">
+        <label for="f-stress">Stress per kN</label>
+        <input id="f-stress" type="number" step="0.0001" min="0" max="10000">
+        <span class="rng">MPa/kN &middot; <b>0 = not supplied</b></span>
+      </div>
+      <div class="cfg-row">
+        <label for="f-detail">Detail category</label>
+        <input id="f-detail" type="number" step="1" min="10" max="200">
+        <span class="rng">MPa &middot; EN 1993-1-9 &Delta;&sigma;<sub>C</sub> at 2&times;10&#8310;</span>
+      </div>
+      <div class="cfg-row">
+        <label for="f-slope">Slope m</label>
+        <input id="f-slope" type="number" step="0.1" min="1" max="10">
+        <span class="rng">3.0 for steel below the knee</span>
+      </div>
+      <div class="cfg-row">
+        <label for="f-cutoff">Cut-off</label>
+        <input id="f-cutoff" type="number" step="1" min="0" max="200">
+        <span class="rng">MPa &middot; cycles below this do no damage</span>
+      </div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-fat-save">Save curve</button>
+      </div>
+
+      <div class="notice" style="margin:11px 0 0">
+        <b>Stress per kN is the setting that turns fatigue on.</b> It converts
+        measured load into the stress range at the monitored detail, and it can
+        only come from the structural engineer for that specific member and
+        connection &mdash; the firmware has no way to derive it. While it is 0
+        the node still accumulates damage so the pipeline is exercised, but it
+        reports <b>UNCALIBRATED</b> and the figure has no physical meaning.
+      </div>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>Cumulative fatigue &mdash; rainflow cycles by load range</h2>
+    <div class="chart-wrap">
+      <svg id="hist" width="1100" height="230" role="img"
+           aria-label="Rainflow cycle counts across 32 load-range bins"></svg>
+    </div>
+    <div class="row" style="margin-top:11px">
+      <button class="sm" id="btn-fat">Read histogram</button>
+      <button class="sm" id="btn-tbl">Show table</button>
+      <div class="spacer"></div>
+      <button class="sm danger" id="btn-fat-reset">Clear lifetime fatigue</button>
+    </div>
+    <div id="tbl-wrap" hidden></div>
+    <div class="notice" style="margin-top:11px">
+      <b>Clearing is permanent and cannot be undone from here.</b> Accumulated
+      damage is the running total of every train this node has ever weighed, and
+      it is the one figure on the device that nothing else can reconstruct &mdash;
+      everything else is either a live reading or recoverable from the cloud.
+      Clear it when the node is commissioned onto the structure, so bench trials
+      do not count, or when it moves to a different member. The S-N curve, the
+      calibration, the queued events and the lifetime counters are all kept.
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ CLOUD ══════════════════════════ -->
+<section role="tabpanel" id="t-cloud" hidden>
+  <div class="grid">
+    <div class="card" id="ms-card">
+      <h2>Modem, SIM and signal</h2>
+      <div class="sub" style="margin:-4px 0 10px">
+        Run this before blaming the cloud. No SIM, a locked SIM, no coverage and
+        a refused registration all look the same from outside the enclosure, and
+        each one needs a different fix.
+      </div>
+      <div class="kv"><span class="k">Modem responds</span><span class="v" id="ms-at">&mdash;</span></div>
+      <div class="kv"><span class="k">SIM</span><span class="v" id="ms-sim">&mdash;</span></div>
+      <div class="kv"><span class="k">ICCID</span><span class="v" id="ms-iccid">&mdash;</span></div>
+      <div class="kv"><span class="k">IMEI</span><span class="v" id="ms-imei">&mdash;</span></div>
+      <div class="kv"><span class="k">Registration</span><span class="v" id="ms-reg">&mdash;</span></div>
+      <div class="kv"><span class="k">Operator</span><span class="v" id="ms-oper">&mdash;</span></div>
+      <div class="kv"><span class="k">Network / band</span><span class="v" id="ms-mode">&mdash;</span></div>
+      <div class="kv"><span class="k">Signal (CSQ)</span><span class="v" id="ms-csq">&mdash;</span></div>
+      <div class="kv"><span class="k">Cell power (RSRP)</span><span class="v" id="ms-rsrp">&mdash;</span></div>
+      <div class="kv"><span class="k">Cell quality (SINR)</span><span class="v" id="ms-sinr">&mdash;</span></div>
+      <div class="notice" id="ms-hint" style="margin:11px 0 0;display:none"></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-ms">Check modem &amp; SIM</button>
+        <button class="sm" id="btn-ms-off">Power modem off</button>
+      </div>
+      <div class="sub" style="margin-top:6px">
+        Takes around 15 seconds and leaves the modem powered so you can swap the
+        SIM or move the antenna and run it again. <b>Power it off when you are
+        finished</b> &mdash; it is the largest draw on the board.
+      </div>
+      <div class="notice info" style="margin-top:10px">
+        <b>CSQ is not the number that decides.</b> On LTE it is a wideband
+        reading that includes interference, so it can look healthy while the
+        serving cell is unusable. <b>RSRP</b> is the one to judge by: better than
+        &minus;95 dBm is good, below &minus;110 dBm will struggle.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>ThingsBoard provisioning</h2>
+      <div class="notice info">
+        Written over <b>BLE only</b>. The cloud cannot change these &mdash; a
+        remote push that rewrote the broker or token could disconnect the node
+        from the very channel needed to fix it.
+      </div>
+      <div class="cfg-row"><label for="p-token">Access token</label>
+        <input type="text" id="p-token" placeholder="from ThingsBoard">
+        <span class="rng" id="p-token-state">&mdash;</span></div>
+      <div class="cfg-row"><label for="p-host">Broker host</label>
+        <input type="text" id="p-host" placeholder="dashboard.bridgethings.com"><span class="rng"></span></div>
+      <div class="cfg-row"><label for="p-port">Broker port</label>
+        <input type="number" id="p-port" min="1" max="65535"><span class="rng">1883</span></div>
+      <div class="cfg-row"><label for="p-apn">APN <span class="sub">(blank = auto)</span></label>
+        <input type="text" id="p-apn" placeholder="leave blank"><span class="rng"></span></div>
+      <div class="kv" style="margin-top:8px"><span class="k">Cloud ready</span><span class="v" id="p-ready">&mdash;</span></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm" id="btn-prov-rd">Read</button>
+        <button class="sm primary" id="btn-prov-wr">Write &amp; commit</button>
+      </div>
+      <div class="sub" id="prov-note" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Sending policy</h2>
+      <div class="cfg-row"><label for="cl-policy">When to upload</label>
+        <select id="cl-policy">
+          <option value="0">Immediately after each event</option>
+          <option value="1">Batched, on the interval</option>
+        </select><span class="rng">independent of the supply</span></div>
+      <div class="cfg-row"><label for="cl-gap">Minimum gap</label>
+        <input type="number" id="cl-gap" min="0" max="3600">
+        <span class="rng">s &middot; 0 = every event. Coalesces a burst into one session.</span></div>
+      <div class="cfg-row"><label for="cl-int">Batch interval</label>
+        <input type="number" id="cl-int" min="1" max="1440"><span class="rng">min &middot; batched mode only</span></div>
+      <div class="cfg-row"><label for="cl-src">Power source</label>
+        <select id="cl-src">
+          <option value="0">Auto</option>
+          <option value="1">Battery</option>
+          <option value="2">Mains</option>
+        </select><span class="rng">recorded for the cloud; does not affect uploading</span></div>
+      <div class="notice" style="margin:11px 0 0">
+        <b>Immediate on battery is a supported combination</b> &mdash; these two
+        settings used to be one, so the only way to get prompt reporting was to
+        declare the node mains-powered. It costs one modem session per train; if
+        that proves too much on a busy line, raise the minimum gap rather than
+        going back to batching.
+      </div>
+      <div class="cfg-row"><label for="cl-base">Periodic idle sample</label>
+        <select id="cl-base"><option value="0">Off</option><option value="1">On</option></select>
+        <span class="rng"></span></div>
+      <div class="cfg-row"><label for="cl-bint">Idle sample every</label>
+        <input type="number" id="cl-bint" min="1" max="1440"><span class="rng">min</span></div>
+      <div class="cfg-row"><label for="cl-bdur">Idle sample length</label>
+        <input type="number" id="cl-bdur" min="1" max="60"><span class="rng">s</span></div>
+      <div class="notice" style="margin:11px 0 0">
+        The idle sample records the bridge doing nothing. Deterioration shows in
+        the quiet behaviour long before it changes a passage peak, so this is
+        what makes a trend visible between trains.
+      </div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-cloud-wr">Apply</button>
+        <button class="sm" id="btn-upload2">Upload now</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ DIAGNOSTICS ══════════════════════════ -->
+<section role="tabpanel" id="t-diag" hidden>
+  <div class="grid">
+    <div class="card">
+      <h2>AD7193 load-cell ADC</h2>
+      <div class="kv"><span class="k">Detected</span><span class="v" id="a-det">&mdash;</span></div>
+      <div class="kv"><span class="k">ID register</span><span class="v" id="a-id">&mdash;</span></div>
+      <div class="kv"><span class="k">Write path</span><span class="v" id="a-wr">&mdash;</span></div>
+      <div class="kv"><span class="k">Last reading</span><span class="v" id="a-read">&mdash;</span></div>
+      <div class="kv"><span class="k">Chip temperature</span><span class="v" id="a-temp">&mdash;</span></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-ad-probe">Probe</button>
+        <button class="sm" id="btn-ad-short" title="Channel 9 shorts the modulator input internally">Self-test</button>
+        <button class="sm" id="btn-ad-load">Read load</button>
+        <button class="sm" id="btn-ad-temp">Chip temp</button>
+        <button class="sm" id="btn-ad-cal">Internal cal</button>
+      </div>
+      <div class="sub" id="a-hint" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Accelerometer</h2>
+      <div class="kv"><span class="k">Part</span><span class="v" id="x-part">&mdash;</span></div>
+      <div class="kv"><span class="k">Detected</span><span class="v" id="x-det">&mdash;</span></div>
+      <div class="kv"><span class="k">I2C address</span><span class="v" id="x-addr">&mdash;</span></div>
+      <div class="kv"><span class="k">Device ID</span><span class="v" id="x-id">&mdash;</span></div>
+      <div class="kv"><span class="k">Silicon rev</span><span class="v" id="x-rev">&mdash;</span></div>
+      <div class="kv"><span class="k">Measuring</span><span class="v" id="x-meas">&mdash;</span></div>
+      <div class="kv"><span class="k">Registers</span><span class="v" id="x-regs">&mdash;</span></div>
+      <div class="kv"><span class="k">Interrupt pin</span><span class="v" id="x-int">&mdash;</span></div>
+      <div class="kv"><span class="k">X / Y / Z</span><span class="v" id="x-xyz">&mdash;</span></div>
+      <div class="kv"><span class="k">Magnitude</span><span class="v" id="x-mag">&mdash;</span></div>
+      <div class="kv"><span class="k">Averaged X / Y / Z</span><span class="v" id="x-avg">&mdash;</span></div>
+      <div class="kv"><span class="k">Noise (1&sigma;)</span><span class="v" id="x-noise">&mdash;</span></div>
+      <div class="kv"><span class="k">Tilt X / Y</span><span class="v" id="x-tilt">&mdash;</span></div>
+      <div class="kv"><span class="k">Change since install</span><span class="v" id="x-tiltd">&mdash;</span></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-acc-probe">Probe</button>
+        <button class="sm" id="btn-acc-read">Read once</button>
+        <button class="sm" id="btn-acc-live">Live: off</button>
+      </div>
+      <div class="notice info" style="margin:11px 0 0">
+        <b>Tilt is only meaningful while the node is still.</b> The angles come
+        from the direction of gravity, so during a train &mdash; or with a hand on
+        the enclosure &mdash; they measure the deck's motion instead and are
+        refused rather than shown.
+        <br><br>
+        <b>Judge by the change, not the absolute.</b> The part's zero-g offset
+        puts about a degree of error on the absolute angles, but it is the same
+        error every time, so it cancels almost entirely in the difference:
+        a 0.3&deg; change since commissioning is real, while a 0.3&deg; absolute
+        reading is not. A drift here with no change in load is a bracket
+        loosening or a bearing rotating.
+        <br><br>
+        <b>Every angle here is an average of 32 samples</b>, not a single
+        reading. The part carries about 2 mg of broadband noise, which near
+        level is 0.13&deg; &mdash; enough that a motionless node appears to wander
+        by a quarter of a degree. Averaging 32 divides that by &radic;32, giving
+        about 0.02&deg;. The <b>Noise</b> row is the spread seen while
+        averaging: around 2 mg is the sensor itself, and much more than that
+        means something is physically shaking.
+      </div>
+      <div class="sub" id="x-hint" style="margin-top:8px">
+        A part lying still should read about <b>1000 mg</b> magnitude &mdash;
+        that is gravity, and it is the quickest proof the part is alive, level
+        and scaled correctly.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Modem</h2>
+      <div class="kv"><span class="k">IMEI</span><span class="v" id="m-imei">&mdash;</span></div>
+      <div class="kv"><span class="k">ICCID</span><span class="v" id="m-iccid">&mdash;</span></div>
+      <div class="kv"><span class="k">Module revision</span><span class="v" id="m-oper">&mdash;</span></div>
+      <div class="kv"><span class="k">Signal (CSQ)</span><span class="v" id="m-csq">&mdash;</span></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm" id="btn-mdm-info">Identity</button>
+        <button class="sm" id="btn-mdm-test">Full test</button>
+        <button class="sm" id="btn-mdm-dbg">AT trace: off</button>
+        <button class="sm" id="btn-mdm-on">Power on</button>
+        <button class="sm" id="btn-mdm-off">Power off</button>
+      </div>
+      <div class="sub" style="margin-top:8px">
+        With the AT trace on, every command and reply appears in the Terminal
+        tab. That is the fastest way to tell a SIM, network and broker problem
+        apart.
+      </div>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>Board</h2>
+    <div class="kv"><span class="k">Compiled pin map</span><span class="v" id="g-board">&mdash;</span></div>
+    <div class="kv"><span class="k">Modem UART</span><span class="v" id="g-uart">&mdash;</span></div>
+    <div class="kv"><span class="k">Modem power / reset</span><span class="v" id="g-pwr">&mdash;</span></div>
+    <div class="kv"><span class="k">Sensor faults</span><span class="v" id="g-flt">&mdash;</span></div>
+    <div class="kv"><span class="k">Heap free / least ever</span><span class="v" id="g-mem">&mdash;</span></div>
+    <div class="row" style="margin-top:11px">
+      <button class="sm" id="btn-pins">Read pin map</button>
+      <button class="sm" id="btn-mem">Read memory</button>
+      <button class="sm" id="btn-trace">Last passage shape</button>
+      <button class="sm" id="btn-simtrain">Simulate event</button>
+      <button class="sm danger" id="btn-reboot">Reboot node</button>
+    </div>
+    <div class="sub" style="margin-top:8px">
+      The pin map is read from the running firmware, not assumed. If it reports
+      a board you did not intend, nothing else on this page is trustworthy.
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ ALL SETTINGS ══════════════════════════ -->
+<section role="tabpanel" id="t-cfg" hidden>
+  <div class="notice info">
+    Every stored parameter, what it does, and why it is set the way it is.
+    Changes are queued locally and written together when you press
+    <b>Write &amp; commit</b> &mdash; one flash write for the batch, because
+    committing per field would burn the endurance budget.
+  </div>
+  <div class="card wide">
+    <div id="cfg-table"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="sm" id="btn-cfg-rd">Read from node</button>
+      <button class="sm primary" id="btn-cfg-wr">Write &amp; commit</button>
+      <button class="sm" id="btn-cfg-exp">Export CSV</button>
+      <button class="sm" id="btn-cfg-imp">Import CSV</button>
+      <input type="file" id="cfg-file" accept=".csv,text/csv" hidden>
+      <span class="sub" id="cfg-note"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ TERMINAL ══════════════════════════ -->
+<section role="tabpanel" id="t-term" hidden>
+  <div class="card wide">
+    <h2>SPP terminal</h2>
+    <div id="log"></div>
+    <div class="term-in">
+      <input type="text" id="cmd" placeholder="Command, e.g. STATUS or HELP — Enter to send" autocomplete="off">
+      <button class="sm" id="btn-send">Send</button>
+      <button class="sm" id="btn-clear">Clear</button>
+      <button class="sm" id="btn-save">Save log</button>
+    </div>
+    <div class="sub" style="margin-top:8px">
+      Send <code>HELP</code> for the command list. Everything this console does
+      is one of these commands &mdash; there is no hidden protocol.
+    </div>
+  </div>
+</section>
+
+<div id="tooltip" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * BLE SPP transport
+ * ═══════════════════════════════════════════════════════════════════════ */
+const SPP_SVC  = '4880c12c-fdcb-4077-8920-a450d7f9b907';
+const SPP_CHAR = 'fec26ec4-6d71-4442-9f81-55bc21d658d6';
+
+let liveTimer = null, demoMode = false;
+const $ = id => document.getElementById(id);
+
+
+/*
+ * Times on this page are shown in IST.
+ *
+ * The NODE still keeps and reports UTC -- every timestamp it stores, uploads and
+ * puts in an event record is UTC, and that does not change. This is a display
+ * conversion only, because the people using this page are standing on the
+ * bridge and think in local time, and mentally adding 5:30 to a reading while
+ * up a walkway at night is exactly where a mistake gets made.
+ *
+ * A fixed offset rather than toLocaleString(): India is UTC+5:30 with no
+ * daylight saving, so the offset is exact and constant. Using the browser's own
+ * zone would instead show whatever the phone happens to be set to, which is a
+ * different answer for a visiting engineer and a silent one -- the label would
+ * still say IST.
+ */
+const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+
+/* `unixSeconds` -> "YYYY-MM-DD HH:MM:SS". Zero and negative are NOT dates: the
+ * node counts from zero when it has never been given a clock, and rendering
+ * that as 1970 makes an unset clock look like a real reading. */
+const istStamp = (unixSeconds) => {
+  const n = +unixSeconds;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return new Date(n * 1000 + IST_OFFSET_MS)
+           .toISOString().replace('T', ' ').slice(0, 19);
+};
+
+/* The console's own receive clock, so every time on the page reads the same. */
+const istNow = () =>
+  new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(11, 19);
+
+function log(msg, cls) {
+  const box=$('log'), at = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+  const d=document.createElement('div');
+  d.className = cls || 'l-info';
+  d.textContent = `[${istNow()}] ${msg}`;
+  box.appendChild(d);
+  while (box.childElementCount > 800) box.removeChild(box.firstChild);
+  if (at) box.scrollTop = box.scrollHeight;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Link — connection, framing, and a SERIALISED command queue
+ *
+ * This layer used to be four loose globals and a send() that pushed bytes at
+ * the characteristic and returned. Three things went wrong with that, and all
+ * three were invisible from the page:
+ *
+ *   1. NOTHING SERIALISED THE COMMANDS. "Write & commit" fires about thirty
+ *      SET_CFG_ lines back to back through writeValueWithoutResponse, which by
+ *      definition has no flow control. On desktop Chrome that usually survives;
+ *      on Android it drops writes silently, so a parameter simply did not take
+ *      and the page reported success because the WRITE succeeded.
+ *
+ *   2. THE NODE HAS ONE STREAM SLOT. GET_CONFIG, GET_FATIGUE and GET_TUNE are
+ *      paced multi-line streams on the firmware side and arming one ABORTS any
+ *      other in progress (ss_spp.c, arm_stream). "Refresh all" sent GET_CONFIG
+ *      and then six more commands immediately, so the settings table was
+ *      populated from however much of the stream had escaped before something
+ *      else cut it off — a partial config that looks complete.
+ *
+ *   3. A DROPPED LINK STAYED DROPPED. The only recovery was for whoever was
+ *      standing at the bridge to notice the badge had gone grey and press
+ *      Connect again.
+ *
+ * So: one command in flight at a time, each held until the device's own
+ * acknowledgement arrives (or a per-command timeout), and a connection that
+ * puts itself back together.
+ *
+ * The device remains the authority throughout. Nothing here infers state from
+ * a command having been sent — every panel is still painted from what the node
+ * actually replies.
+ * ═══════════════════════════════════════════════════════════════════════ */
+class LinkError extends Error {}
+window.addEventListener('unhandledrejection', event => {
+  if (event.reason instanceof LinkError) {
+    event.preventDefault();
+    $('conn-t').textContent = 'Operation stopped — see console';
+    log(event.reason.message + ' — operation stopped; reconnect and read settings before retrying.', 'l-err');
+  }
+});
+const Link = (() => {
+  /* 20 bytes is the payload of the default 23-byte ATT MTU. Chrome may not
+   * have renegotiated a larger one when the first command goes out, and the
+   * firmware reassembles on newline, so a split command is transparent. */
+  const CHUNK = 20;
+
+  /* Gap after a command whose completion cannot be recognised. Long enough for
+   * the node to have dispatched it from its BLE handler, short enough that a
+   * thirty-parameter write still finishes while someone is watching. */
+  const PACE_MS = 40;
+
+  let device = null, char = null, rxBuf = '';
+  let want = false;                 /* the operator's intent, not the state  */
+  let reconnectTimer = null, backoff = 1000;
+
+  const queue = [];
+  let inflight = null;              /* {cmd, done, timer, resolve}           */
+
+  /*
+   * How to tell that a command has finished.
+   *
+   * Keyed off the reply the firmware actually sends, not off a guess at timing.
+   * A command with no rule here is simply paced — that is correct for the
+   * fire-and-forget ones, and it is why the table only needs the commands whose
+   * replies are multi-line or slow.
+   *
+   * The staged operations (MODEM_TEST, TRIGGER_UPLOAD, CAPTURE_NOW, PROFILE=)
+   * deliberately complete on their IMMEDIATE acknowledgement rather than on the
+   * work finishing. They block the node for up to ninety seconds and their
+   * progress arrives as unsolicited lines; holding the queue for them would
+   * freeze the console exactly when it has the most to show.
+   */
+  function completionFor(cmd) {
+    if (cmd === 'GET_CONFIG')  return { key: 'CFG_END',     ms: 20000 };
+    if (cmd === 'GET_FATIGUE') return { key: 'FATIGUE_END', ms: 20000 };
+    if (cmd === 'GET_TUNE')    return { key: 'TUNE_END',    ms: 20000 };
+
+    const set = /^SET_CFG_([A-Z0-9_]+)=/.exec(cmd);
+    if (set) {
+      const name = set[1];
+      return {
+        ms: 3000,
+        match: (k, v) => (k === 'OK'  && v === name)
+                      || (k === 'ERR' && (v.startsWith(name + ',')
+                                       || v.startsWith('UNKNOWN_PARAM'))),
+      };
+    }
+    if (cmd === 'COMMIT_CFG') {
+      return { ms: 8000,
+               match: (k, v) => (k === 'OK' || k === 'ERR')
+                                && v.startsWith('COMMIT_CFG') };
+    }
+    if (cmd.startsWith('SET_MODE=')) {
+      return { ms: 8000,
+               match: (k, v) => k === 'MODE' || (k === 'ERR' && !!v) };
+    }
+    if (cmd === 'GET_CAL' || cmd === 'GET_WAKE') {
+      /* Both end on a key the firmware always emits last for them. Waiting is
+       * worth it: they are long enough to interleave visibly otherwise. */
+      return { ms: 6000, key: cmd === 'GET_CAL' ? 'SITE' : 'ADC_CHOP' };
+    }
+    return null;
+  }
+
+  function finish(item = inflight, error = null) {
+    if (!item || inflight !== item) return;
+    clearTimeout(inflight.timer);
+    inflight = null;
+    if (error) {
+      item.reject(error);
+      while (queue.length) queue.shift().reject(error);
+    } else item.resolve();
+    pump();
+  }
+
+  /* Called for every decoded line, before the UI sees it. */
+  function observe(key, val) {
+    if (!inflight) return;
+    if (key === 'ERR' && (val === 'BUSY' || val.startsWith('BUSY,'))) {
+      finish(inflight, new LinkError('Device busy; retry after the operation finishes'));
+      return;
+    }
+    if (!inflight.done) return;
+    if (inflight.done(key, val)) finish(inflight,
+      key === 'ERR' ? new LinkError('Device rejected command: ' + val) : null);
+  }
+
+  async function pump() {
+    if (inflight || queue.length === 0) return;
+    if (!char) {
+      /* Drain rather than hold: a queue that survives a disconnection would
+       * replay stale commands at whatever node connects next. */
+      while (queue.length) queue.shift().reject(new LinkError('Disconnected'));
+      return;
+    }
+
+    const item = queue.shift();
+    inflight = item;
+    log('→ ' + item.cmd, 'l-tx');
+
+    const data = new TextEncoder().encode(item.cmd + '\n');
+    const target = char;
+    try {
+      for (let i = 0; i < data.byteLength; i += CHUNK) {
+        if (inflight !== item || char !== target) return;
+        await target.writeValueWithoutResponse(data.slice(i, i + CHUNK));
+      }
+    } catch (e) {
+      log('Write failed: ' + e.message, 'l-err');
+      finish(item, new LinkError('Bluetooth write failed: ' + e.message));
+      return;
+    }
+
+    if (inflight !== item) return;
+    if (item.done) {
+      item.timer = setTimeout(() => {
+        /* Said out loud. A command that never got its acknowledgement means
+         * either the node is busy in a long operation or something was lost,
+         * and silently carrying on is how a half-written configuration comes
+         * to look like a successful one. */
+        log('No reply to ' + item.cmd + ' within ' + item.ms + ' ms', 'l-err');
+        finish(item, new LinkError('No acknowledgement for ' + item.cmd));
+      }, item.ms);
+    } else {
+      item.timer = setTimeout(() => finish(item), PACE_MS);
+    }
+  }
+
+  function enqueue(cmd) {
+    if (demoMode) { log('→ ' + cmd + '  (demo)', 'l-tx'); return Promise.resolve(); }
+    if (!char) return Promise.reject(new LinkError('Not connected'));
+
+    const rule = completionFor(cmd);
+    return new Promise((resolve, reject) => {
+      queue.push({
+        cmd,
+        ms: rule ? rule.ms : PACE_MS,
+        done: rule ? (rule.match ? rule.match : (k => k === rule.key)) : null,
+        timer: null,
+        resolve,
+        reject,
+      });
+      pump();
+    });
+  }
+
+  /* A notification is not guaranteed to align with a line boundary, so the
+   * trailing partial segment is carried over rather than parsed. */
+  function onNotify(ev) {
+    rxBuf += new TextDecoder().decode(ev.target.value);
+    const lines = rxBuf.split(/\r?\n/);
+    rxBuf = lines.pop();
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      log('← ' + line, 'l-rx');
+      const eq = line.indexOf('=');
+      if (eq > 0) observe(line.slice(0, eq), line.slice(eq + 1));
+      try { handleLine(line); } catch (e) { log('parse: ' + e.message, 'l-err'); }
+    }
+  }
+
+  async function attach() {
+    const svc = await device.gatt.getPrimaryService(SPP_SVC);
+    char = await svc.getCharacteristic(SPP_CHAR);
+    await char.startNotifications();
+    char.addEventListener('characteristicvaluechanged', onNotify);
+    rxBuf = '';
+    backoff = 1000;
+    demoMode = false;
+    setConnUI(true, device.name || 'Sentinel');
+  }
+
+  function onDisconnected() {
+    if (char) char.removeEventListener('characteristicvaluechanged', onNotify);
+    char = null;
+    rxBuf = '';
+    const abandoned = inflight;
+    inflight = null;
+    if (abandoned) {
+      clearTimeout(abandoned.timer);
+      abandoned.reject(new LinkError('Disconnected during command'));
+    }
+    while (queue.length) queue.shift().reject(new LinkError('Disconnected'));
+    stopLive();
+    setConnUI(false);
+
+    if (!want) { log('Disconnected'); return; }
+
+    /*
+     * Reconnect on our own.
+     *
+     * A node drops the link for entirely ordinary reasons — it holds EM1 only
+     * for the connection, and a capture plus an upload is ninety seconds of
+     * the radio doing other work. Making somebody up a walkway at night notice
+     * a grey badge and press Connect again is not a reasonable recovery, and
+     * it is worst precisely when the node is busiest.
+     *
+     * Backs off to 8 s so a node that is genuinely gone is not hammered.
+     */
+    log('Link dropped — reconnecting in ' + (backoff / 1000) + ' s', 'l-err');
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(async () => {
+      if (!want || !device) return;
+      try {
+        await device.gatt.connect();
+        await attach();
+        log('Reconnected to ' + (device.name || 'device'));
+        await refreshAll();
+      } catch (e) {
+        backoff = Math.min(backoff * 2, 8000);
+        onDisconnected();
+      }
+    }, backoff);
+  }
+
+  return {
+    send: enqueue,
+
+    async connect() {
+      if (!navigator.bluetooth) { $('compat').hidden = false; return; }
+      try {
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [SPP_SVC] }], optionalServices: [SPP_SVC] });
+        device.addEventListener('gattserverdisconnected', onDisconnected);
+        want = true;
+        await device.gatt.connect();
+        await attach();
+        log('Connected to ' + (device.name || 'device'));
+        await refreshAll();
+      } catch (e) {
+        want = false;
+        log('Connect failed: ' + e.message, 'l-err');
+      }
+    },
+
+    disconnect() {
+      /* Intent first, so the disconnect handler does not immediately undo it. */
+      want = false;
+      clearTimeout(reconnectTimer);
+      if (device && device.gatt.connected) device.gatt.disconnect();
+    },
+
+    get connected() { return char !== null; },
+    get busy()      { return inflight !== null || queue.length > 0; },
+  };
+})();
+
+/* Every call site still says send('X'). The promise now resolves when the NODE
+ * has answered rather than when the bytes left the browser, which is what lets
+ * a caller sequence commands at all. */
+const send = cmd => Link.send(cmd);
+
+function setConnUI(on, name) {
+  $('conn').classList.toggle('on', on);
+  $('conn-t').textContent = on ? ('Connected · ' + name) : 'Disconnected';
+  $('btn-conn').disabled = on; $('btn-disc').disabled = !on;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Configuration schema
+ *
+ * One table drives the settings tab, the CSV import/export and the range
+ * checks. The `doc` field is the reason the parameter exists — it lives here
+ * rather than on the node because 16 KB of help text has no business in
+ * 32 KB of RAM.
+ * ═══════════════════════════════════════════════════════════════════════ */
+const CFG = [
+ ['Load cell', null, null, null, null, null],
+ ['CAPACITY_KN','Rated capacity','num',0.001,100000,'kN',
+  'From the cell certificate. Scales every relative threshold and every fatigue bin width. Wrong here means every reading is wrong by that ratio, silently.'],
+ ['MV_PER_V','Rated output','num',0.1,100,'mV/V',
+  'The cell output at rated capacity. With capacity, this is what converts a voltage ratio into a force. Changing it clears the span calibration, because the stored correction was measured against the old value.'],
+ ['PGA_GAIN','ADC gain','sel',0,0,'',
+  'AD7193 programmable gain. 128 is the maximum and correct for a 2 mV/V cell: full load then uses 25.6% of the converter span, leaving 4x overload headroom. Reduce only for a higher-output cell.',
+  ['1','8','16','32','64','128']],
+ ['VREF_MV','Excitation voltage','num',0,5500,'mV',
+  '0 = the board default of 3000 mV. The bridge is excited from a regulated 3.000 V tied to AVDD/AGND, and REF+/REF− are those same nodes, so the excitation is the same on battery and on mains. Affects ONLY the microvolt figure shown for diagnostics — load in kN is ratiometric and cancels the excitation exactly, so changing this never invalidates a calibration.'],
+ ['ADC_CHOP','Chop','bool',0,0,'',
+  'Continuously removes ADC offset and drift and gains about half a bit, but quadruples conversion and settling time. Off by default; use the internal zero-scale calibration instead during captures.'],
+
+ ['Trigger', null, null, null, null, null],
+ ['ACTIVITY_MG','Activity threshold','num',10,2000,'mg',
+  'How far the deck must move away from its stored resting orientation before the ADXL367 wakes the MCU. A DEVIATION, not an absolute acceleration: gravity and bracket tilt are removed in hardware by referenced mode, so this is not "a tenth of a g". Choose it by profiling, not by guessing.'],
+ ['INACTIVITY_MG','Quiet threshold','num',5,2000,'mg',
+  'Deviation below which the bridge counts as quiet again. Must sit below the activity threshold, or the same vibration both starts and ends a train and the part never sleeps.'],
+ ['ACTIVITY_TIME_MS','Sustained motion','num',0,5000,'ms',
+  'How long motion must stay above the threshold before it counts. Filters single knocks. NOTE: this filter applies in measurement mode only — in the low-power wake-up mode the part triggers on a single sample, which is why the MCU re-checks after a wake.'],
+ ['INACTIVITY_MS','Quiet time to end','num',200,10000,'ms',
+  'How long the deck must stay quiet before the part decides the train has gone and drops back to its low-power state.'],
+ ['ACCEL_AXIS_MASK','Detect on axes','num',0,6,'',
+  'Bitmask of axes to BLOCK from wake detection: 1=X, 2=Y, 4=Z; 0 uses all three. The ADXL367 ORs the enabled axes, so an axis that sees the site noise but none of the train raises the floor the others have to clear — blocking it is what lets the threshold come down. A train profile suggests the right value. All three blocked is refused: the node would never wake.'],
+ ['HEALTH_CHECK_S','Self-check interval','num',0,3600,'s',
+  'How often the node verifies its own wake path: that the ADXL367 still answers, that its arming registers still hold, and that the interrupt line is not stuck asserted. The last of those is the one that matters — in loop mode the part waits for inactivity after a train, and a deck that never goes quiet leaves it asserted forever, after which no train produces an edge and nothing says so. Repairs are skipped while a capture, upload, profile or calibration is in progress. 0 disables it.'],
+ ['WAKE_CONFIRM_MS','Wake re-check','num',0,5000,'ms',
+  'How long the MCU re-samples the accelerometer after a hardware wake, before spending the analog rail and a modem session on a capture. 0 trusts the hardware. This is the defence against the single-sample triggering that wake-up mode uses.'],
+ ['PROFILE_BASE_S','Baseline profile length','num',10,120,'s',
+  'How long a baseline run watches the quiet bridge. A minute lets wind and passing road traffic into the measurement; a shorter window flatters the site and yields a threshold that is too low.'],
+ ['PROFILE_TRAIN_S','Train profile length','num',5,120,'s',
+  'How long a train profile runs. Long enough for the slowest freight that crosses this span.'],
+ ['TRAIN_TIMEOUT_S','Capture timeout','num',5,3600,'s',
+  'Hard stop on one capture. A seized bearing or a failed-high cell would otherwise capture forever.'],
+
+ ['Acquisition', null, null, null, null, null],
+ ['TRACE_ENABLE','Send passage shape','bool',0,1,'',
+  'Uploads a per-second trace with every event: the peak, mean and minimum load in each second of the passage, plus the peak acceleration. It is what turns "peaked at 118 kN over 47 s" into a picture of what actually crossed - one locomotive and sixty light wagons looks nothing like a uniformly loaded rake, and the event record alone cannot tell them apart. Costs about 380 bytes on a message that is already being sent. This switch controls the UPLOAD only; the trace is always built and GET_TRACE will still show it here, at no airtime cost.'],
+ ['TRACE_PERIOD_MS','Trace bucket period','num',250,10000,'ms',
+  'How much time each bucket of the trace covers. One second is about 11 m of train at the 40 km/h this line runs. A trace holds 64 buckets, and a passage that outruns them is NOT truncated - the buckets merge in pairs and the period doubles, so the whole passage is always covered and the console reports the period it ended up at. Note this cannot resolve individual axles at any setting: bogie axles are ~162 ms apart at line speed, and that needs the raw waveform, not this.'],
+ ['ACCEL_CAPTURE_HZ','Accelerometer during capture','num',0,400,'Hz',
+  'Takes the ADXL367 out of activity detection for the length of a capture and streams it from its FIFO, which is what fills the acceleration column of the trace and the peak/RMS mg on the event record. 0 disables it, and is the only setting under which the part is never taken out of detection at all. The firmware re-arms unconditionally at the end of every capture, including the timeout and ADC-stall paths.'],
+ ['LOAD_RATE_HZ','Capture sample rate','num',20,500,'Hz',
+  'Rate during a capture. The AD7193 cannot go below about 75 Hz, so lower values are clamped and the real rate is reported. Choose for bandwidth, not noise — even 300 Hz is 8 ppm of full scale.'],
+ ['ACCEL_RATE_HZ','Accelerometer rate','num',12,100,'Hz',
+  'ADXL367 output data rate. The part maxes out at 400 Hz; low rates keep the FIFO drain cheap.'],
+ ['LOAD_END_FRAC','Load end fraction','num',0.02,0.5,'',
+  'Legacy end-of-event level as a fraction of the event peak, used by the accelerometer capture path.'],
+
+ ['Reporting', null, null, null, null, null],
+ ['UPLOAD_POLICY','When to upload','sel',0,0,'',
+  'Immediately sends as soon as an event is queued; Batched holds events until the upload interval. Independent of how the node is powered — a battery node reporting immediately is a supported and common choice, it simply costs one modem session per train.',
+  ['Immediately','Batched']],
+ ['HEARTBEAT_MIN','Longest permitted silence','num',0,10080,'min',
+  'How long a healthy node may go without contacting the cloud, even with nothing queued. A quiet line queues no events, so under the batched policy the node had no reason to open a session and simply stopped reporting - which from an office is indistinguishable from a flat battery, a seized accelerometer or a snapped antenna. That ambiguity is the failure this whole product is arranged around. The session it triggers is not empty: it carries the fatigue total, the node\u2019s own health counters and a clock refresh. One a day costs about 0.1% of the energy this site\u2019s traffic already spends. 0 disables it, for a node deliberately parked out of contact.'],
+ ['UPLOAD_MIN_GAP_S','Minimum gap between sessions','num',0,3600,'s',
+  'Only in Immediate mode. A floor between modem sessions, so several trains arriving inside the gap ride out together on one session instead of one each. 0 is truly immediate. This is the setting that makes immediate reporting affordable on a battery.'],
+ ['POWER_SOURCE','Power source','sel',0,0,'',
+  'Selects the sending regime: mains uploads each event as it happens, battery batches them. It no longer has anything to do with the excitation voltage, which is a regulated 3.000 V either way. Auto is treated as battery: guessing mains on a battery node would flatten the pack in days.',
+  ['Auto (= battery)','Battery','Mains']],
+ ['UPLOAD_INT_MIN','Upload interval','num',1,1440,'min',
+  'Battery regime only. Measured from the last attempt, not the last success, so a failing link backs off instead of retrying continuously.'],
+ ['UPLOAD_RETRIES','Upload retries','num',0,5,'',
+  'Attempts per interval before giving up until the next one.'],
+ ['ENABLE_BASELINE','Periodic idle sample','bool',0,0,'',
+  'Records the bridge doing nothing on an interval. Deterioration shows in the quiet behaviour long before it changes a passage peak.'],
+ ['BASELINE_INT_MIN','Idle sample interval','num',1,1440,'min',
+  'How often the idle sample is taken.'],
+ ['BASELINE_DUR_S','Idle sample length','num',1,60,'s',
+  'Length of each idle recording. 5 s at 50 Hz is 250 samples — ample for a mean, an RMS and a noise floor, and far cheaper than a full capture.'],
+ ['CHAR_BATCH_S','Characterisation batch','num',10,60,'s',
+  'Length of a threshold-tuning batch in characterisation mode.'],
+ ['ENABLE_BLE','BLE enabled','bool',0,0,
+  '','Advertising and SPP. Disabling saves current on a commissioned node but removes the only local way back in.'],
+ ['ENABLE_LTE','LTE enabled','bool',0,0,'',
+  'Cellular uploads. Off means events accumulate in the queue.'],
+ ['ENABLE_SD','SD raw archive','bool',0,0,'',
+  'Spool raw waveforms to the SD card per event.'],
+];
+
+const GAIN_STEPS = ['1','8','16','32','64','128'];
+const isHeading = r => r[2] === null;
+
+(function buildCfg() {
+  let h = '<table><thead><tr><th>Parameter</th><th>Value</th><th>Range</th>'
+        + '<th class="doc">What it does</th></tr></thead><tbody>';
+  for (const r of CFG) {
+    const [k,label,type,lo,hi,unit,doc,opts] = r;
+    if (isHeading(r)) { h += `<tr><td colspan="4"><h3>${k}</h3></td></tr>`; continue; }
+    let input;
+    if (type === 'sel')
+      input = `<select id="cfg-${k}">` + opts.map((o,i)=>`<option value="${i}">${o}</option>`).join('') + '</select>';
+    else if (type === 'bool')
+      input = `<select id="cfg-${k}"><option value="0">Off</option><option value="1">On</option></select>`;
+    else
+      input = `<input type="number" id="cfg-${k}" step="any" min="${lo}" max="${hi}">`;
+    const rng = type === 'num' ? `${lo}–${hi}${unit ? ' ' + unit : ''}` : '';
+    h += `<tr><td>${label}<br><span class="sub">${k}</span></td><td>${input}</td>`
+       + `<td>${rng}</td><td class="doc">${doc || ''}</td></tr>`;
+  }
+  $('cfg-table').innerHTML = h + '</tbody></table>';
+})();
+
+function setCfgField(name, val) {
+  const el = $('cfg-' + name);
+  if (!el) return;
+  /* PGA_GAIN renders as a picker but the firmware speaks the gain itself
+   * (1/8/…/128), not the option index. Sending the index would silently
+   * select a different gain and make every reading wrong by an integer. */
+  if (name === 'PGA_GAIN') {
+    const i = GAIN_STEPS.indexOf(String(parseInt(val,10)));
+    el.value = String(i < 0 ? GAIN_STEPS.length-1 : i);
+  } else el.value = val;
+}
+function cfgWire(k, el) { return k === 'PGA_GAIN' ? GAIN_STEPS[+el.value] : el.value; }
+
+/*
+ * Writes every filled-in parameter, then commits once.
+ *
+ * One commit, not one per parameter: nothing is persisted until COMMIT_CFG, so
+ * a page-full of settings costs a single flash write rather than thirty. Over a
+ * ten-year deployment that difference is real -- see the write policy in
+ * ss_config.h.
+ *
+ * The awaits are load-bearing now. Each resolves on the node's own OK=/ERR=
+ * for that parameter, so a bulk write cannot outrun the link: with
+ * writeValueWithoutResponse and no acknowledgement, Android silently dropped
+ * writes and this function still reported success, because the WRITE had
+ * succeeded even though the parameter never arrived.
+ */
+async function writeConfig() {
+  const note = $('cfg-note');
+  let sent = 0;
+  const outOfRange = [];
+  const refused = [];
+
+  /* Refusals come back asynchronously as ERR=<NAME>,<reason>; collect them by
+   * name so the message can say which parameter the node would not take. */
+  const onRefusal = (name, reason) => refused.push(`${name} (${reason})`);
+  window.__cfgRefusal = onRefusal;
+
+  for (const r of CFG) {
+    if (isHeading(r)) continue;
+    const [k, label, type, lo, hi] = r;
+    const el = $('cfg-' + k);
+    if (!el || el.value === '') continue;
+    if (type === 'num') {
+      const v = parseFloat(el.value);
+      if (!Number.isFinite(v) || v < lo || v > hi) { outOfRange.push(label); continue; }
+    }
+    note.textContent = `Writing ${label}…`;
+    await send(`SET_CFG_${k}=${cfgWire(k, el)}`);
+    sent++;
+  }
+
+  await send('COMMIT_CFG');
+  window.__cfgRefusal = null;
+
+  const parts = [`Sent ${sent} parameter(s), committed.`];
+  if (outOfRange.length) parts.push('Skipped out of range: ' + outOfRange.join(', '));
+  /* A parameter the NODE refused is different from one this page skipped: the
+   * first means the firmware disagrees about the valid range, which is a
+   * version mismatch worth knowing about. */
+  if (refused.length) parts.push('Refused by the node: ' + refused.join(', '));
+  note.textContent = parts.join('  ');
+}
+
+/* CSV round-trip: what makes a 120-node rollout practical. Same key,value
+ * shape as the shipped presets, and '#' comments survive a read. */
+function exportCsv() {
+  let out = '# StruSense configuration preset\n# key,value\n';
+  for (const r of CFG) {
+    if (isHeading(r)) { out += `#\n# ${r[0]}\n`; continue; }
+    const el = $('cfg-' + r[0]);
+    if (el && el.value !== '') out += `${r[0]},${cfgWire(r[0],el)}\n`;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([out], {type:'text/csv'}));
+  a.download = ($('c-site').value.trim() || 'strusense') + '_config.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function importCsv(text) {
+  let n = 0;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const [k, v] = line.split(',');
+    if (!k || v === undefined) continue;
+    if ($('cfg-' + k.trim())) { setCfgField(k.trim(), v.trim()); n++; }
+  }
+  $('cfg-note').textContent = `Loaded ${n} value(s). Review, then Write & commit.`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Response parsing. Every reply is KEY=VALUE; unknown keys are logged and
+ * ignored so an older console stays usable against newer firmware.
+ * ═══════════════════════════════════════════════════════════════════════ */
+/* Two modes. Index is the wire value; the legacy 2..6 fold to Setup and 4 to
+ * Monitoring, which normaliseMode() below handles. */
+const MODES = ['SETUP','MONITORING'];
+function normaliseMode(raw) {
+  /* The node now answers "MODE=<n>,<NAME>"; older firmware answers "MODE=<n>".
+   * Take the number either way, then fold the legacy numbering. */
+  const n = parseInt(String(raw).split(',')[0], 10);
+  if (!Number.isFinite(n)) return 0;
+  if (n === 1 || n === 4) return 1;
+  return 0;
+}
+/* Bit order matches SS_EVENT_FLAG_* in ss_types.h. NO_CLOCK is the one that
+ * changes how a reading should be READ: the load and cycles are real, the
+ * timestamp is not — it is uptime, and the point will land in 1970. */
+const EVENT_FLAGS = ['TIMEOUT','OVERRUN','SATURATED','TEMP_STALE','ARCHIVED',
+                     'BASELINE','MANUAL','NO_CLOCK'];
+
+let fatBins = new Array(32).fill(0), fatFullScale = 150;
+const SS_MAX_SEC = 120;   /* mirrors SS_PROFILE_MAX_SECONDS in the firmware */
+
+const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+const fmt = (v,d) => (v === null || v === undefined) ? '—' : v.toFixed(d);
+const setTxt = (id,t,c) => { const e=$(id); if(e){ e.textContent=t; if(c) e.style.color=c; } };
+
+/* Accumulated across the multi-line GET_MEM and GET_TRACE responses. Declared
+ * here, above the dispatcher that fills them, rather than beside the buttons
+ * that trigger them. */
+let memInfo = {};
+let msMode = "";
+let traceRows = [];
+let traceMeta = {};
+
+function handleLine(line) {
+  const eq = line.indexOf('=');
+  if (eq < 0) return;
+  const key = line.slice(0,eq), val = line.slice(eq+1);
+
+  const mf = key.match(/^FATIGUE\[(\d+)\]$/);
+  if (mf) { const i=+mf[1]; if (i<32) fatBins[i] = num(val)||0; return; }
+  const mt = key.match(/^TUNE\[(\d+)\]$/);
+  if (mt) { const i=+mt[1]; if (i<SS_MAX_SEC) { PROF.base.secs[i]=num(val)||0; chartRender(); } return; }
+  if (key.startsWith('CFG_')) { setCfgField(key.slice(4), val); mirrorToPanels(key.slice(4), val); return; }
+
+  switch (key) {
+    case 'MODE': {
+      const n = normaliseMode(val);
+      setTxt('t-mode', MODES[n]);
+      setTxt('m-cur', 'now: ' + MODES[n]);
+      /* Only follow the device if the operator is not mid-selection, so a
+       * status refresh does not silently revert a pending choice. */
+      if ($('m-mode').value === String(n) || !modeDirty) {
+        $('m-mode').value = String(n); paintMode(n);
+      }
+      ready.mode = n; paintReadiness();
+      break;
+    }
+    case 'LOAD_KN':   setTxt('t-load', fmt(num(val),2)); break;
+    case 'TEMP_C':    setTxt('t-temp', fmt(num(val),2)); break;
+    case 'BATT_MV':   setTxt('t-batt', val); break;
+    case 'PENDING':   setTxt('t-pend', val); break;
+    case 'POWER_SOURCE':
+      /* Descriptive now — it no longer decides anything about uploading. */
+      $('cl-src').value = String(parseInt(val, 10) || 0);
+      break;
+    case 'UPLOAD_POLICY': {
+      /* On the Readiness card because "captured but never sent" is otherwise
+       * indistinguishable from a broken uplink. */
+      const n = parseInt(val, 10) || 0;
+      setTxt('r-regime', n === 0 ? 'immediate — send on each event'
+                                 : 'batched — send on the interval',
+             n === 0 ? 'var(--good)' : '');
+      $('cl-policy').value = String(n);
+      break;
+    }
+    case 'UPLOAD_MIN_GAP_S': $('cl-gap').value = val; break;
+    case 'QUEUED': {
+      /* "<pending>,<NOW|GAP|BATCHED>,<seconds or minutes>" */
+      const p = val.split(',');
+      if (p[1] === 'NOW') {
+        log(`Event queued (${p[0]} pending) — uploading now`);
+      } else if (p[1] === 'GAP') {
+        log(`Event queued (${p[0]} pending) — holding ${p[2]} s for the minimum gap`,
+            'l-info');
+      } else {
+        log(`Event queued (${p[0]} pending) — next upload in ${p[2]} min`
+            + ' — set "When to upload" to Immediately for prompt sending', 'l-info');
+      }
+      break;
+    }
+    case 'FW':        setTxt('d-fw', val); break;
+    case 'UPTIME_S':  setTxt('d-up', humanTime(+val)); break;
+    case 'RSTCAUSE':  setTxt('d-rst', val); break;
+    case 'WDT_RESETS':setTxt('d-wdt', val); break;
+    case 'CSQ':       setTxt('d-rssi', val); setTxt('m-csq', val); break;
+    case 'LIFE_EVENTS': setTxt('d-ev', val); break;
+    case 'SENSOR_FAULTS': setTxt('g-flt', val); break;
+    case 'UTC_NOW': {
+      const n = +val;
+      setTxt('d-utc', istStamp(n) || 'unset');
+      break;
+    }
+    case 'TIME_SYNC': {
+      /* The node just learned the time from the network. */
+      const p = val.split(',');
+      log(`Clock ${p[1] === 'FIRST' ? 'set' : 'refreshed'} from network: `
+          + (istStamp(p[0]) || 'unset') + ' IST');
+      break;
+    }
+    case 'TIME_SRC': {
+      /*
+       * Four states, not two. The node has no battery-backed RTC, so after a
+       * reset it resumes from an anchor it wrote to flash -- approximately
+       * right and corrected at the next session. Reporting that as merely "set"
+       * hides the approximation; reporting it as "never set" would be wrong and
+       * would send someone to fix a clock that is working.
+       */
+      const SRC = {
+        NONE:     ['never set — events are stamped from uptime', 'var(--crit)'],
+        RESTORED: ['resumed after a reset (±30 min until the next session)', 'var(--warn)'],
+        MANUAL:   ['set by hand', 'var(--good)'],
+        NETWORK:  ['network time', 'var(--good)'],
+      };
+      const d = SRC[val] || [val, ''];
+      setTxt('t-timesrc', d[0], d[1]);
+      ready.clock = val; paintReadiness();
+      break;
+    }
+    case 'TIME_VALID': {
+      /* Not "accurate" — just "has been set". The node has no battery-backed
+       * RTC, so after a power cut it counts from zero, and an event stamped
+       * from an unset clock looks like a real time. */
+      const ok = val === '1';
+      const e = $('d-utc');
+      e.style.color = ok ? '' : 'var(--warn)';
+      if (!ok) e.textContent += '  (never set)';
+      break;
+    }
+    case 'SITE':      setTxt('d-site', val || '(unset)'); $('c-site').value = val; break;
+
+    /* ── Calibration ─────────────────────────────────────────────────── */
+    case 'CAL_VALID': {
+      const ok = val === '1';
+      setTxt('k-valid', ok ? 'calibrated' : 'UNCALIBRATED',
+             ok ? 'var(--good)' : 'var(--warn)');
+      setTxt('r-cal', ok ? 'yes' : 'no — nominal scaling',
+             ok ? 'var(--good)' : 'var(--warn)');
+      ready.cal = ok; paintReadiness();
+      break;
+    }
+    case 'CAL_ZERO': setTxt('k-zero', val); break;
+    case 'CAL_SPAN': setTxt('k-span', val); break;
+    case 'CAL_RESULT': handleCalResult(val); break;
+    case 'CAPACITY_KN': $('c-cap').value = val; recalcCell(); break;
+    case 'MV_PER_V':    $('c-mvv').value = val; recalcCell(); break;
+    case 'PGA_GAIN':    $('c-gain').value = String(parseInt(val,10)); recalcCell(); break;
+    case 'VREF_UV': {
+      const p = val.split(',');
+      vrefUv = +p[0];
+      $('c-vref').value = (p[1]==='AUTO') ? '0' : String(Math.round(vrefUv/1000));
+      recalcCell();   /* the full-scale figure depends on it */
+      break;
+    }
+    case 'FS_UV': setTxt('c-fs', fmt(num(val),1) + ' µV'); break;
+    /* STREAM carries the on/off state and nothing else; the samples arrive
+     * tagged SAMPLE. They shared a key once, and every sample line reset the
+     * button back to "off" a few milliseconds after it turned on. */
+    case 'STREAM':
+      streamOn = (val === '1');
+      $('btn-stream').textContent = 'Live stream: ' + (streamOn ? 'on' : 'off');
+      break;
+    case 'SAMPLE':     setTxt('k-live', val); setTxt('a-read', val); break;
+    case 'SAMPLE_ERR': $('cal-note').textContent = 'Stream: ' + val; break;
+
+    /* ── Detector ────────────────────────────────────────────────────── */
+    case 'WAKE_SOURCE':
+      setTxt('w-accel-state', 'ADXL367 (only trigger source)'); break;
+    case 'ACT_MG':   $('w-act').value = val; break;
+    case 'INACT_MG': $('w-inact').value = val; break;
+    case 'ACTIVITY_TIME_MS':  $('w-acttime').value = val; break;
+    case 'INACTIVITY_MS':     $('w-inacttime').value = val; break;
+    case 'WAKE_CONFIRM_MS':   $('w-confirm').value = val; break;
+    case 'AUTOSLEEP':         $('w-autosleep').value = val; break;
+    case 'PROFILE_BASE_S':    $('w-pbase').value = val; break;
+    case 'PROFILE_TRAIN_S':   $('w-ptrain').value = val; break;
+    case 'RETRIGGER': {
+      /* The wake line was still asserted after an activity was dealt with, so
+       * the part was re-armed on the spot. Without this the node stays deaf
+       * until the next self-check, up to a whole interval later. */
+      const p = val.split(',');
+      log(`Re-armed after ${p[0]} — wake line was still asserted (#${p[1]})`,
+          p[2] === 'OK' ? 'l-info' : 'l-err');
+      setTxt('w-retrig', p[1]);
+      break;
+    }
+    case 'ACTIVITY': {
+      const p = val.split(',');
+      if (p[0] === '0') {
+        log(`Wake rejected at ${p[2]} mg (${p[3]} so far) — not a train`, 'l-info');
+      } else {
+        /* UNCHECKED means stage 2 could not run and passed the wake through.
+         * That is a different fact from "confirmed", and an accept reporting
+         * 0 mg is otherwise a contradiction. */
+        log(`Train detected — event #${p[1]}, ${p[2]} mg`
+            + (p[3] === 'UNCHECKED' ? ' (confirmation did NOT run)' : ''),
+            p[3] === 'UNCHECKED' ? 'l-err' : '');
+      }
+      break;
+    }
+    case 'HEALTH_CHECK_S': $('w-healthint').value = val; break;
+    case 'HEALTH_REPAIRS':
+      /* A node repairing itself constantly has a real problem — most likely a
+       * quiet threshold the deck never gets below. Without this it looks
+       * identical to one that simply works. */
+      setTxt('w-repairs', val, (+val > 20) ? 'var(--warn)' : '');
+      break;
+    case 'HEALTH_LAST':
+      setTxt('w-health', val, (val === 'OK' || val === 'BUSY') ? 'var(--good)'
+                                                               : 'var(--warn)');
+      break;
+    case 'HEALTH': {
+      /* Pushed the moment a repair happens, not just on a status poll. */
+      const p = val.split(',');
+      let msg = `Self-check: ${p[0]}` + (p[1] ? ` (repair #${p[1]})` : '');
+      if (p[0] === 'INACT_TOO_LOW') {
+        /* The one that needs a person: re-arming clears it for one train, and
+         * then it comes straight back. */
+        msg += ` — ${p[2] || ''} vs ${p[3] || ''}; raise the quiet threshold`;
+      }
+      log(msg, p[0] === 'NO_CLOCK' ? 'l-info' : 'l-err');
+      break;
+    }
+    case 'FALSE_WAKES':
+      /* A handful is normal; hundreds means the threshold is too low and the
+       * node is spending its battery waking up for weather. */
+      setTxt('w-false', val, (+val > 50) ? 'var(--warn)' : '');
+      break;
+    case 'ACCEL_REF_VALID':
+      setTxt('p-ref', val === '1' ? 'yes' : 'NOT SET — node will not arm',
+             val === '1' ? 'var(--good)' : 'var(--crit)');
+      ready.ref = val === '1'; paintReadiness();
+      break;
+    case 'ACCEL_REF':
+      setTxt('p-ref', 'x/y/z = ' + val + ' mg', 'var(--good)');
+      break;
+
+    /* ── profiling ───────────────────────────────────────────────────────── */
+    case 'PROFILE': {
+      const p = val.split(',');
+      if (p[0] === '0') {
+        setTxt(PROF.show === 'train' ? 'p-train-state' : 'p-base-state',
+               'failed: ' + (p[2] || p[1] || '?'), 'var(--crit)');
+        break;
+      }
+      const train = p[1] === 'TRAIN';
+      PROF_ACTIVE = train ? 'train' : 'base';
+      const run = train ? PROF.train : PROF.base;
+      run.secs = []; run.peak = 0; run.done = false;
+      /*
+       * p[4] is the lead-in: seconds the node collects and discards before it
+       * starts measuring, so the filter transient from waking the part and the
+       * hand that pressed this button stay out of the peak. Said out loud
+       * because a run that appears not to start for two seconds otherwise
+       * looks like a fault — and because the operator needs to know when to
+       * take their hand off the enclosure.
+       */
+      const lead = parseInt(p[4], 10);
+      setTxt(train ? 'p-train-state' : 'p-base-state',
+             Number.isFinite(lead) && lead > 0
+               ? `settling ${lead} s — hands off the node…`
+               : `running ${p[2]} s at ${p[3]} Hz…`,
+             'var(--warn)');
+      chartShow(train ? 'train' : 'base');
+      break;
+    }
+    case 'PROFILE_MEASURING':
+      /* The lead-in is over and the numbers from here on are the structure. */
+      setTxt(PROF_ACTIVE === 'train' ? 'p-train-state' : 'p-base-state',
+             'measuring…', 'var(--warn)');
+      break;
+    case 'PROFILE_SEC': {
+      /* "PROFILE_SEC=<first>,<v>,<v>,..." — an offset plus up to ten values, so
+       * a two-minute run is a dozen notifications rather than a hundred. */
+      const p = val.split(',');
+      const at = +p[0];
+      const run = PROF_ACTIVE === 'train' ? PROF.train : PROF.base;
+      for (let k = 1; k < p.length; k++) run.secs[at + k - 1] = +p[k] || 0;
+      chartRender();
+      break;
+    }
+    case 'PROFILE_STATS': {
+      const m = /peak=([-\d.]+)/.exec(val);
+      if (m) {
+        const run = PROF_ACTIVE === 'train' ? PROF.train : PROF.base;
+        run.peak = parseFloat(m[1]) || 0;
+        setTxt(PROF_ACTIVE === 'train' ? 'p-train-peak' : 'p-idle-peak',
+               Math.round(run.peak) + ' mg');
+      }
+      chartRender();
+      break;
+    }
+    case 'PROFILE_DONE': {
+      const p = val.split(',');
+      const train = p[0] === 'TRAIN';
+      const ok = p[1] === 'OK';
+      setTxt(train ? 'p-train-state' : 'p-base-state',
+             `${ok ? 'complete' : 'stopped early'} — ${p[2]} s, ${p[3]} samples`,
+             ok ? 'var(--good)' : 'var(--warn)');
+      (train ? PROF.train : PROF.base).done = true;
+      break;
+    }
+    case 'PROFILE_REF':
+      PROF.base.ref = val;
+      break;
+    case 'PROFILE_AXPEAK': {
+      /* "<BASELINE|TRAIN>,<x>,<y>,<z>" — the peak on each axis separately.
+       * The headline figure is the worst of the three, because that is what the
+       * part compares; these say which axis earned it. */
+      const p = val.split(',');
+      setTxt(p[0] === 'TRAIN' ? 'p-train-ax' : 'p-idle-ax',
+             `x ${p[1]} · y ${p[2]} · z ${p[3]} mg`);
+      break;
+    }
+    case 'PROFILE_AXIS_MASK': {
+      /* "<mask>,<XYZ>" with a lowercase letter for each blocked axis. */
+      const p = val.split(',');
+      const blocked = +p[0];
+      setTxt('p-axmask', blocked === 0 ? 'all three (X Y Z)'
+                                       : `${p[1]} — lowercase sees noise, no train`,
+             blocked === 0 ? 'var(--good)' : 'var(--warn)');
+      break;
+    }
+    case 'ACCEL_AXIS_MASK':
+      $('w-axmask').value = String(parseInt(val.split(',')[0], 10) || 0);
+      break;
+    case 'PROFILE_REF_SAVED':
+      setTxt('p-ref', val.startsWith('OK') ? 'stored on the node' : 'FAILED: ' + val,
+             val.startsWith('OK') ? 'var(--good)' : 'var(--crit)');
+      break;
+    case 'PROFILE_SUGGEST': {
+      const p = val.split(',');
+      if (p[0] === 'ERR') {
+        /* The honest answer, shown as prominently as a number would be. */
+        PROF.suggest = 0;
+        setTxt('p-suggest', 'no threshold separates this site', 'var(--crit)');
+        setTxt('p-sep', (p[2] || '').replace('sep=', '') + '× — too low',
+               'var(--crit)');
+      } else {
+        PROF.suggest = parseFloat(p[0]) || 0;
+        setTxt('p-suggest', Math.round(PROF.suggest) + ' mg', 'var(--good)');
+        setTxt('p-sep', (p[1] || '').replace('sep=', '') + '×', 'var(--good)');
+      }
+      chartRender();
+      break;
+    }
+
+    case 'MONITOR': {
+      const p = val.split(',');
+      if (p[0]==='0') setTxt('r-armed','not armed — '+(p[1]||'?'),'var(--crit)');
+      else setTxt('r-armed',`accelerometer @ ${p[2]||'?'} Hz`,'var(--good)');
+      ready.armed = p[0] !== '0'; paintReadiness();
+      break;
+    }
+
+    /* ── Events / fatigue ────────────────────────────────────────────── */
+    case 'EV_TS':
+      /* 0 is not a date. It means the node had no clock when this was captured,
+       * so the stamp is uptime, not a time — the NO_CLOCK flag says so too. */
+      if (+val === 0) {
+        setTxt('e-ts', 'no clock — timestamp unknown', 'var(--warn)');
+      } else {
+        setTxt('e-ts', istStamp(val));
+      }
+      break;
+    case 'EV_DUR_MS': setTxt('e-dur', (+val/1000).toFixed(2)+' s'); break;
+    case 'EV_PEAK_KN':setTxt('e-pl', fmt(num(val),2)+' kN'); break;
+    case 'EV_MEAN_KN':setTxt('e-al', fmt(num(val),2)+' kN'); break;
+    case 'EV_RMS_KN': setTxt('e-rl', fmt(num(val),2)+' kN'); break;
+    case 'EV_PEAK_MG':setTxt('e-pa', fmt(num(val),1)+' mg'); break;
+    /* Emitted by the node and previously ignored here, so the field sat blank
+     * on a page that had the number in hand. */
+    case 'EV_RMS_MG': setTxt('e-ra', fmt(num(val),1)+' mg'); break;
+    case 'EV_CYCLES': setTxt('e-cyc', val); break;
+    case 'EV_FLAGS': {
+      const b = +val;
+      setTxt('e-flags', decodeFlags(b));
+      setTxt('e-kind', (b & 64) ? 'manual capture'
+                     : (b & 32) ? 'periodic idle sample' : 'train passage');
+      break;
+    }
+    case 'FAT_FULLSCALE_KN': fatFullScale = num(val)||150; break;
+    case 'FAT_DAMAGE': setTxt('f-dmg', (num(val)??0).toExponential(3)); break;
+    case 'FAT_CALIBRATED':
+      setTxt('f-cal', val==='1'?'calibrated':'UNCALIBRATED',
+             val==='1'?'var(--good)':'var(--warn)'); break;
+    case 'FAT_STRESS_PER_KN': $('f-stress').value = val; break;
+    case 'FAT_DETAIL_MPA':    $('f-detail').value = val; break;
+    case 'FAT_SLOPE_M':       $('f-slope').value  = val; break;
+    case 'FAT_CUTOFF_MPA':    $('f-cutoff').value = val; break;
+    case 'FAT_HINT':
+      /* The node explains its own zero: no stress figure, or a full scale that
+       * cannot reach the cut-off. Both produce a permanent 0 that nothing else
+       * on this screen would account for. */
+      setTxt('f-hint', val, 'var(--warn)'); break;
+    case 'FATIGUE_END': drawHistogram(); break;
+    case 'TUNE_BATCH': chartShow('base'); break;
+
+    /* ── Cloud ───────────────────────────────────────────────────────── */
+    case 'TB_TOKEN': $('p-token').value = val; break;
+    case 'TB_HOST':  $('p-host').value  = val; break;
+    case 'TB_PORT':  $('p-port').value  = val; break;
+    case 'APN':      $('p-apn').value   = val; break;
+    case 'TB_TOKEN_SET':
+      setTxt('p-token-state', val==='1'?'provisioned':'auto (MAC)',
+             val==='1'?'var(--good)':'var(--warn)'); break;
+    case 'CLOUD_READY':
+      setTxt('p-ready', val==='1'?'yes':'no — token/host missing',
+             val==='1'?'var(--good)':'var(--warn)');
+      setTxt('r-cloud', val==='1'?'yes':'no', val==='1'?'var(--good)':'var(--warn)');
+      ready.cloud = val === '1'; paintReadiness();
+      break;
+    case 'UPLOAD_DONE': { const p=val.split(',');
+      /* p[3] is the fatigue/lifetime snapshot, sent every session regardless of
+       * whether any event was queued. Its absence is what "no fatigue in the
+       * cloud" looks like from here. */
+      const st = (p[3] === undefined) ? '' : (p[3] === '1' ? ', state sent'
+                                                           : ', STATE FAILED');
+      log(`Upload: ${p[0]}/${p[1]} events, CSQ ${p[2]}${st}`,
+          p[3] === '0' ? 'l-err' : '');
+      break; }
+    case 'BASELINE': case 'CAPTURE': {
+      /* "OK,<samples>,<hz>,<cycles>,<mean>,<rms>" or "ERR,<why>" */
+      const p = val.split(',');
+      const what = (key === 'CAPTURE') ? 'Manual capture' : 'Idle sample';
+      if (p[0] === 'OK') {
+        log(`${what}: ${p[1]} samples @ ${p[2]} Hz, ${p[3]} cycles, `
+            + `mean ${p[4]} kN, rms ${p[5]} kN`);
+        readEvent();
+      } else {
+        log(`${what} failed: ` + val, 'l-err');
+      }
+      break;
+    }
+    case 'EVENT': log('Capture: ' + val); readEvent(); break;
+    case 'CLOUD': log('cloud: ' + val); break;
+
+    /* ── Diagnostics ─────────────────────────────────────────────────── */
+    case 'BOARD': setTxt('g-board', val); setTxt('d-board', val); break;
+    case 'MDM_TX': gPins.tx = val; paintPins(); break;
+    case 'MDM_RX': gPins.rx = val; paintPins(); break;
+    case 'MDM_PWR': gPins.pwr = val; paintPins(); break;
+    case 'MDM_RST': gPins.rst = val; paintPins(); break;
+    case 'MI_IMEI':  setTxt('m-imei', val); break;
+    case 'MI_ICCID': setTxt('m-iccid', val); break;
+    case 'MI_REV':   setTxt('m-oper', val); break;   /* module firmware revision */
+    case 'MI_CSQ': {
+      /* -1 = never read, 99 = unknown, 0-31 otherwise. 0 used to appear on a
+       * working link because of a parser race; if it still does, suspect the
+       * antenna rather than the parser. */
+      const n = parseInt(val, 10);
+      setTxt('m-csq', Number.isFinite(n) && n >= 0 && n <= 31 ? `${n}/31` : `${val} (unknown)`,
+             (n >= 10 && n <= 31) ? 'var(--good)' : 'var(--warn)');
+      break;
+    }
+    /* ── Memory ─────────────────────────────────────────────────────────
+     * FREE is instantaneous and optimistic; MIN_FREE is total minus the high
+     * watermark, i.e. the least that has ever been free since boot. A fixed
+     * buffer may only be sized against the second one, so both are shown and
+     * the smaller is the one in bold. */
+    /* ── Modem / SIM / signal ────────────────────────────────────────────
+     * The node sends "<value>,<verdict>" on the fields where the verdict is
+     * what matters. Colour comes from the node's own judgement rather than
+     * thresholds duplicated here, so the console and the firmware can never
+     * disagree about what counts as weak. */
+    case 'FATIGUE_RESET':
+      log(val.startsWith('OK') ? 'Lifetime fatigue cleared (' + val + ')'
+                               : 'Fatigue reset FAILED: ' + val,
+          val.startsWith('OK') ? 'good' : 'bad');
+      fatBins.fill(0);
+      break;
+    case 'FATIGUE_RESET_KEPT':
+      log('Kept: ' + val.replace(/,/g, ', '));
+      break;
+
+    case 'MS_AT':
+      setTxt('ms-at', val === 'yes' ? 'yes' : val,
+             val === 'yes' ? 'var(--good)' : 'var(--crit)'); break;
+    case 'MS_SIM': {
+      const [state, verdict] = val.split(',');
+      setTxt('ms-sim', state, verdict === 'ok' ? 'var(--good)' : 'var(--crit)');
+      break; }
+    case 'MS_ICCID': setTxt('ms-iccid', val); break;
+    case 'MS_IMEI':  setTxt('ms-imei', val); break;
+    case 'MS_REG': {
+      const [stat, text] = val.split(',');
+      const good = stat === '1' || stat === '5';
+      setTxt('ms-reg', text, good ? 'var(--good)' : 'var(--crit)');
+      break; }
+    case 'MS_OPER': setTxt('ms-oper', val || 'none'); break;
+    case 'MS_MODE': msMode = val; setTxt('ms-mode', val); break;
+    case 'MS_BAND': setTxt('ms-mode', `${msMode} · band ${val}`); break;
+    case 'MS_CSQ': {
+      const p = val.split(',');
+      setTxt('ms-csq', p.length > 2 ? `${p[0]} (${p[1]}) — ${p[2]}` : 'unknown',
+             p[2] === 'good' ? 'var(--good)'
+             : p[2] === 'usable' ? 'var(--warn)' : 'var(--crit)');
+      break; }
+    case 'MS_RSRP': {
+      const [dbm, verdict] = val.split(',');
+      setTxt('ms-rsrp', `${dbm} dBm — ${verdict}`,
+             verdict === 'good' ? 'var(--good)'
+             : verdict === 'usable' ? 'var(--warn)' : 'var(--crit)');
+      break; }
+    case 'MS_RSRQ': break;
+    case 'MS_SINR': {
+      const [db, verdict] = val.split(',');
+      setTxt('ms-sinr', `${db} dB — ${verdict}`,
+             verdict === 'good' ? 'var(--good)'
+             : verdict === 'usable' ? 'var(--warn)' : 'var(--crit)');
+      break; }
+    case 'MS_HINT': {
+      const box = $('ms-hint');
+      box.textContent = val;
+      box.style.display = '';
+      break; }
+    case 'MS': break;
+
+    case 'MEM_HEAP_TOTAL': memInfo.total = +val; break;
+    case 'MEM_HEAP_FREE':  memInfo.free  = +val; break;
+    case 'MEM_MIN_FREE':
+      memInfo.min = +val;
+      setTxt('g-mem',
+        `${memInfo.free ?? '?'} B free · ${memInfo.min} B least ever` +
+        (memInfo.total ? ` of ${memInfo.total} B` : ''),
+        memInfo.min < 2048 ? 'var(--warn)' : '');
+      break;
+    case 'MEM_HEAP_USED': case 'MEM_HEAP_HWM': case 'MEM_STACK':
+    case 'MEM_NOTE': break;
+
+    /* ── Passage trace ──────────────────────────────────────────────────── */
+    case 'TRACE_N':
+      traceRows = [];
+      traceMeta = { n: +val };
+      if (+val === 0) log('No trace yet - capture a passage first.');
+      break;
+    case 'TRACE_MS':     traceMeta.ms = +val; break;
+    case 'TRACE_COARSE': traceMeta.coarse = val === '1'; break;
+    case 'TRACE_HDR':    break;
+    case 'TRACE': {
+      traceRows.push(val);
+      if (traceRows.length === traceMeta.n) {
+        const secs = (traceMeta.ms || 1000) / 1000;
+        log(`Passage shape: ${traceMeta.n} buckets of ${secs}s` +
+            (traceMeta.coarse
+              ? ' (coarsened - the passage outran the configured period)' : ''));
+        log('i,peak_kn,mean_kn,min_kn,vib_mg_dev');
+        for (const r of traceRows) log('  ' + r);
+      }
+      break;
+    }
+    case 'MODEM_DEBUG':
+      $('btn-mdm-dbg').textContent = 'AT trace: ' + (val==='1'?'on':'off'); break;
+    case 'AD_ID': { const p=val.split(',');
+      setTxt('a-id', `${p[0]} (${p[2]||'?'})`, p[2]==='MATCH'?'var(--good)':'var(--warn)'); break; }
+    case 'AD_MODEWRITE': setTxt('a-wr', val, val==='OK'?'var(--good)':'var(--crit)'); break;
+    case 'AD_PROBE': {
+      const ok = val.startsWith('OK');
+      setTxt('a-det', ok?'yes':'NO — '+val, ok?'var(--good)':'var(--crit)'); break;
+    }
+    case 'AD_HINT': setTxt('a-hint', val); break;
+
+    /* ── Accelerometer ───────────────────────────────────────────────── */
+    case 'ACC_PART': setTxt('x-part', val); break;
+    case 'ACC_ADDR': setTxt('x-addr', val); break;
+    case 'ACC_ID': {
+      const p = val.split(',');
+      setTxt('x-id', `${p[0]} (${p[2] || '?'})`,
+             p[2] === 'MATCH' ? 'var(--good)' : 'var(--warn)');
+      break;
+    }
+    case 'ACC_REV': setTxt('x-rev', val); break;
+    case 'ACC_REGS': setTxt('x-regs', val); break;
+    case 'ACC_MEASURING':
+      /* A part that answers but is not measuring returns stale data, which
+       * reads as a working sensor that never changes. */
+      setTxt('x-meas', val === '1' ? 'yes' : 'no — not sampling',
+             val === '1' ? 'var(--good)' : 'var(--warn)');
+      break;
+    case 'ACC_INT_WIRED':
+      /* Without the pin the activity flag would have to be polled, which works
+       * but keeps the MCU awake. Worth stating plainly rather than leaving to
+       * inference. */
+      setTxt('x-int', val === '1' ? 'INT1 on PB02 — EM2 wake'
+                                  : 'not wired — polled, no EM2 sleep',
+             val === '1' ? 'var(--good)' : 'var(--warn)');
+      break;
+    case 'ACC_PROBE': {
+      const ok = val === 'OK';
+      setTxt('x-det', ok ? 'yes' : 'NO', ok ? 'var(--good)' : 'var(--crit)');
+      setTxt('r-accel', ok ? 'present' : 'not detected',
+             ok ? 'var(--good)' : 'var(--warn)');
+      break;
+    }
+    case 'ACC_HINT': setTxt('x-hint', val); break;
+    case 'ACC_READ': {
+      if (val.startsWith('ERR')) { setTxt('x-xyz', val); break; }
+      const p = val.split(',');
+      setTxt('x-xyz', `${p[0]} / ${p[1]} / ${p[2]} mg`);
+      const mag = (p[3] || '').replace('|a|=', '');
+      setTxt('x-mag', mag + ' mg');
+      /* 1 g +/- 20% is "plausible for a part sitting still". */
+      const m = parseFloat(mag);
+      $('x-mag').style.color = (m > 800 && m < 1200) ? 'var(--good)' : 'var(--warn)';
+      break;
+    }
+    case 'ACC_AVG': {
+      const p = val.split(',');
+      const n = (p[3] || '').replace('n=', '');
+      setTxt('x-avg', `${p[0]} / ${p[1]} / ${p[2]} mg  (${n} samples)`);
+      break;
+    }
+    case 'ACC_NOISE': {
+      const p = val.split(',');
+      const quiet = p[3] === 'sensor noise only';
+      setTxt('x-noise', `${p[0]} / ${p[1]} / ${p[2]} mg — ${p[3]}`,
+             quiet ? 'var(--good)' : 'var(--warn)');
+      break;
+    }
+    case 'ACC_TILT': {
+      if (val.startsWith('INVALID')) {
+        /* Not an error. The node was moving, which is the expected answer while
+         * a train is on the deck or somebody has a hand on the enclosure. */
+        setTxt('x-tilt', 'node moving — hold still and re-read', 'var(--warn)');
+        setTxt('x-tiltd', '—');
+        break;
+      }
+      const [tx, ty] = val.split(',');
+      setTxt('x-tilt', `${tx}° / ${ty}°`, '');
+      break;
+    }
+    case 'ACC_TILT_CHANGE': {
+      if (val.startsWith('NONE')) {
+        setTxt('x-tiltd', val.split(',')[1] || 'not available', 'var(--text-muted)');
+        break;
+      }
+      const [dx, dy] = val.split(',');
+      /* A degree of movement on a bolted-down bracket is not weather. Amber
+       * past half a degree, red past two, so a slow loosening is visible before
+       * it becomes a fallen enclosure. */
+      const worst = Math.max(Math.abs(parseFloat(dx)), Math.abs(parseFloat(dy)));
+      setTxt('x-tiltd', `${dx}° / ${dy}°`,
+             worst >= 2 ? 'var(--crit)' : worst >= 0.5 ? 'var(--warn)' : 'var(--good)');
+      break;
+    }
+    case 'AD_READ': setTxt('a-read', val); break;
+    case 'AD_TEMP_C': { const p=val.split(',');
+      setTxt('a-temp', p[0]+' °C ('+(p[1]||'')+')', p[1]==='plausible'?'var(--good)':'var(--warn)'); break; }
+    case 'ERR': {
+      log('error: ' + val, 'l-err');
+      /* A SET_CFG_ refusal during a bulk write is collected so writeConfig()
+       * can name the parameter rather than reporting a blanket success. */
+      if (window.__cfgRefusal) {
+        const c = val.indexOf(',');
+        if (c > 0) window.__cfgRefusal(val.slice(0, c), val.slice(c + 1));
+      }
+      break;
+    }
+    case 'HINT': log(val); break;
+    default: break;
+  }
+
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Deployment readiness — one verdict, not seven facts
+ *
+ * The card below it lists what is true about the node. It does not say whether
+ * the node is FINISHED, and those are different questions: every row can read
+ * plausibly while the one thing that matters is missing. The specific trap this
+ * closes is a node with no site reference — it reports a perfectly healthy
+ * accelerometer, a good calibration and a live cloud link, and it is not armed
+ * and never will be.
+ *
+ * Each blocker names the tab that fixes it, because "ref_valid = 0" is only
+ * actionable to somebody who already knows what to do about it, and the person
+ * reading this is on a walkway at night.
+ *
+ * Fed from the node's own replies, never from what this page has sent.
+ * ═══════════════════════════════════════════════════════════════════════ */
+const ready = {
+  cal: null, ref: null, cloud: null, armed: null, mode: null, clock: null,
+};
+
+function paintReadiness() {
+  const box = $('r-verdict');
+  if (!box) return;
+
+  const blockers = [];
+  if (ready.cal   === false) blockers.push('calibrate the load cell (Commissioning)');
+  if (ready.ref   === false) blockers.push('run a baseline profile (Trigger) — the node cannot arm without one');
+  if (ready.cloud === false) blockers.push('set the access token and broker host (Cloud)');
+  if (ready.mode  === 0)     blockers.push('set the mode to Monitoring (Dashboard)');
+  if (ready.mode  === 1 && ready.armed === false) blockers.push('the node is in Monitoring but did NOT arm — see the reason beside "Monitoring armed"');
+
+  /* A warning rather than a blocker: the node fixes its own clock at the first
+   * successful session, and events captured before then are flagged rather than
+   * lost. Worth saying, not worth stopping for. */
+  const warnings = [];
+  if (ready.clock === 'NONE') {
+    warnings.push('no clock yet — events will be flagged NO_CLOCK until the first session');
+  }
+
+  if (Object.values(ready).every(v => v === null)) {
+    box.className = 'notice';
+    box.textContent = 'Connect to a node to check it.';
+    return;
+  }
+  if (blockers.length) {
+    box.className = 'notice';
+    box.innerHTML = '<b>Not ready to deploy.</b><ul style="margin:6px 0 0 18px">'
+      + blockers.map(b => `<li>${b}</li>`).join('') + '</ul>';
+    return;
+  }
+  box.className = 'notice info';
+  box.innerHTML = '<b>Ready to deploy.</b> Run <b>Read sensor &amp; send</b> once '
+    + 'and watch the record arrive in the cloud before you leave — that is the '
+    + 'only check that proves the whole chain.'
+    + (warnings.length ? '<br><br>' + warnings.join('<br>') : '');
+}
+
+/*
+ * A refused span is the common case in the field, so it gets a real
+ * explanation rather than an error code. The firmware sends what the cell
+ * actually reads at that point on datasheet scaling, which is what separates
+ * "the load is too small for this capacity" from "the cell spec is wrong".
+ */
+function handleCalResult(val) {
+  const p = val.split(',');
+  const what = p[0], ok = p[1] === 'OK';
+  const note = $('cal-note');
+
+  if (what === 'TARE') {
+    note.textContent = ok
+      ? `Zero recorded (${p[2]}). Apply a known load, then Set span.`
+      : 'Tare failed: ' + p.slice(1).join(',');
+  } else if (what === 'CLEAR') {
+    note.textContent = ok ? 'Calibration cleared — back to datasheet scaling.'
+                          : 'Clear failed.';
+  } else if (what === 'SPAN') {
+    if (ok) {
+      note.textContent = `Span set to ${p[2]} at raw ${p[3]}. Calibration complete.`;
+    } else {
+      const why = p[2], nom = p[4];
+      const applied = parseFloat($('k-known').value);
+      const cap = parseFloat($('c-cap').value);
+      let msg = 'Span refused (' + why + ').';
+      if (why === 'RANGE' && nom !== undefined) {
+        const n = parseFloat(nom);
+        msg += ` The cell reads ${nom} kN there, but you entered ${applied} kN.`;
+        if (Number.isFinite(cap) && applied < cap * 0.01) {
+          msg += ` ${applied} kN is under 1% of the ${cap} kN capacity — too small`
+               + ` to calibrate against. Use a larger load, or set the capacity`
+               + ` to match the cell actually fitted.`;
+        } else if (Number.isFinite(n) && n > 0) {
+          msg += ` That is a factor of ${(n/applied).toFixed(2)} — check`
+               + ` CAPACITY_KN, MV_PER_V and PGA_GAIN before the load.`;
+        }
+      }
+      note.textContent = msg;
+    }
+  }
+  send('GET_CAL');
+}
+
+/*
+ * What each mode actually does, not what its name suggests.
+ *
+ * Only Characterisation and Monitoring change behaviour; the rest leave both
+ * the accelerometer and the load scan idle. Saying so plainly stops an
+ * operator leaving a node in "Installation" and wondering why nothing is
+ * captured. "Baseline" is the worst offender — the periodic idle sample is
+ * controlled by ENABLE_BASELINE and runs in ANY mode, not by this.
+ */
+const MODE_DESC = {
+  0: ['Setup', 'Commissioning. Nothing is armed and nothing sleeps, so the node '
+    + 'answers immediately: profiling, calibration, diagnostics, manual captures '
+    + 'and live streaming all work. Leave it here while you are at the bridge.'],
+  1: ['Monitoring', 'The deployed state. The accelerometer is armed, the MCU '
+    + 'sleeps in EM2 between trains, and a wake captures and uploads. Requires a '
+    + 'stored site reference — run a baseline profile first, or arming refuses.'],
+};
+
+function paintMode(sel) {
+  const d = MODE_DESC[sel];
+  $('m-desc').innerHTML = d ? `<b>${d[0]}</b> — ${d[1]}` : '';
+}
+$('m-mode').addEventListener('change', () => paintMode(+$('m-mode').value));
+
+let vrefUv = 3000000;   /* the board's regulated reference, until the node says otherwise */
+let gPins = {};
+function paintPins() {
+  setTxt('g-uart', `TX ${gPins.tx||'?'}  RX ${gPins.rx||'?'}`);
+  setTxt('g-pwr',  `${gPins.pwr||'?'}  /  ${gPins.rst||'?'}`);
+}
+function mirrorToPanels(k, v) {
+  const map = {CAPACITY_KN:'c-cap', MV_PER_V:'c-mvv', 
+    ACTIVITY_MG:'w-act', INACTIVITY_MG:'w-inact', 
+    UPLOAD_INT_MIN:'cl-int',
+    BASELINE_INT_MIN:'cl-bint', BASELINE_DUR_S:'cl-bdur'};
+  if (map[k] && $(map[k])) $(map[k]).value = v;
+  if (k === 'POWER_SOURCE')     $('cl-src').value    = v;
+  if (k === 'UPLOAD_POLICY')    $('cl-policy').value = v;
+  if (k === 'UPLOAD_MIN_GAP_S') $('cl-gap').value    = v;
+  if (k === 'ENABLE_BASELINE') $('cl-base').value = v;
+  if (k === 'PGA_GAIN')        $('c-gain').value  = String(parseInt(v,10));
+  recalcCell();
+}
+
+/* Full-scale differential and the fraction of ADC span it uses — the two
+ * numbers that say whether the gain choice is sane, computed here so the
+ * node does not have to carry the arithmetic or the explanation. */
+function recalcCell() {
+  const mvv = parseFloat($('c-mvv').value), g = parseInt($('c-gain').value,10);
+  if (!Number.isFinite(mvv) || !Number.isFinite(g)) return;
+  const fsUv = mvv * vrefUv / 1000;
+  /* Three decimals to match what the node now reports: at 3.000 V a 1 mV/V cell
+   * is only 3000 µV full scale, and the readings inside it are small. */
+  setTxt('c-fs', fsUv.toFixed(3) + ' µV');
+  const frac = (mvv/1000) * g * 100;
+  setTxt('c-span-used', frac.toFixed(1) + ' %',
+         frac > 100 ? 'var(--crit)' : frac < 5 ? 'var(--warn)' : 'var(--good)');
+  $('cell-note').textContent = frac > 100
+    ? 'Gain too high — full load would clip the converter.'
+    : frac < 5 ? 'Gain low: most of the ADC range is unused.' : '';
+}
+
+const decodeFlags = b => !b ? 'none'
+  : EVENT_FLAGS.filter((_,i)=>b&(1<<i)).join(', ') || ('0x'+b.toString(16));
+function humanTime(s) {
+  if (!Number.isFinite(s)) return '—';
+  const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
+  return d?`${d}d ${h}h ${m}m`:h?`${h}h ${m}m`:`${m}m ${s%60}s`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Charts
+ * ═══════════════════════════════════════════════════════════════════════ */
+function niceTicks(max,n){const raw=max/n,mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const step=[1,2,2.5,5,10].find(m=>m*mag>=raw)*mag;const out=[];
+  for(let v=0;v<=Math.ceil(max/step)*step+1e-9;v+=step)out.push(v);return out;}
+const fmtCount = v => v>=1e6?(v/1e6).toFixed(v%1e6?1:0)+'M'
+  : v>=1e3?(v/1e3).toFixed(v%1e3?1:0)+'k' : String(Math.round(v));
+const roundedTop = (x,yT,w,h,r) =>
+  `M${x},${yT+h} L${x},${yT+r} Q${x},${yT} ${x+r},${yT} L${x+w-r},${yT} `+
+  `Q${x+w},${yT} ${x+w},${yT+r} L${x+w},${yT+h} Z`;
+
+function drawHistogram() {
+  const W=1100,H=230,ML=52,MR=12,MT=12,MB=42, iw=W-ML-MR, ih=H-MT-MB;
+  const binW = fatFullScale/32, ticks = niceTicks(Math.max(...fatBins,1),4);
+  const top = ticks[ticks.length-1], y = v => MT+ih-(v/top)*ih;
+  const slotW = iw/32, barW = Math.max(1, slotW-2);
+  let s = '';
+  ticks.forEach(t => { s += `<line class="grid-line" x1="${ML}" x2="${ML+iw}" y1="${y(t)}" y2="${y(t)}"/>`
+    + `<text class="tick" x="${ML-8}" y="${y(t)+3.5}" text-anchor="end">${fmtCount(t)}</text>`; });
+  fatBins.forEach((c,i) => {
+    const x = ML+i*slotW+1;
+    if (c>0) { const h=Math.max(2,(c/top)*ih), r=Math.min(4,barW/2,h);
+      s += `<path class="bar" d="${roundedTop(x,y(c),barW,h,r)}"/>`; }
+    s += `<rect class="bar-hit" x="${x-1}" y="${MT}" width="${slotW}" height="${ih}"`
+       + ` data-c="${c}" data-lo="${(i*binW).toFixed(1)}" data-hi="${((i+1)*binW).toFixed(1)}"/>`;
+  });
+  s += `<line class="axis-line" x1="${ML}" x2="${ML+iw}" y1="${MT+ih}" y2="${MT+ih}"/>`;
+  for (let i=0;i<32;i+=4) s += `<text class="tick" x="${ML+i*slotW+slotW/2}" y="${MT+ih+15}" text-anchor="middle">${(i*binW).toFixed(0)}</text>`;
+  s += `<text class="axis-title" x="${ML+iw/2}" y="${H-5}" text-anchor="middle">Load range (kN)</text>`;
+  s += `<text class="axis-title" transform="translate(13,${MT+ih/2}) rotate(-90)" text-anchor="middle">Cycles</text>`;
+  if (fatBins.every(v=>!v)) s += `<text class="empty-note" x="${ML+iw/2}" y="${MT+ih/2}" text-anchor="middle">No cycles recorded yet</text>`;
+  $('hist').innerHTML = s;
+
+  const total = fatBins.reduce((a,b)=>a+b,0);
+  setTxt('f-tot', fmtCount(total));
+  const mi = fatBins.indexOf(Math.max(...fatBins));
+  setTxt('f-max', total ? `${(mi*binW).toFixed(0)}–${((mi+1)*binW).toFixed(0)} kN` : '—');
+
+  let h2 = '<table><thead><tr><th>Range (kN)</th><th>Cycles</th></tr></thead><tbody>';
+  fatBins.forEach((c,i)=>{ if(c) h2+=`<tr><td>${(i*binW).toFixed(1)} – ${((i+1)*binW).toFixed(1)}</td><td>${c.toLocaleString()}</td></tr>`; });
+  $('tbl-wrap').innerHTML = h2 + '</tbody></table>';
+}
+
+/* Change over time, single series -> a line. The thresholds overlay as
+ * labelled reference lines because the judgement being made is where they sit
+ * RELATIVE to the peaks. */
+
+$('hist').addEventListener('mousemove', e => {
+  const t = e.target.closest('.bar-hit'), tip = $('tooltip');
+  if (!t) { tip.style.opacity = 0; return; }
+  tip.innerHTML = `<div><span class="tt-k">Range </span><span class="tt-v">${t.dataset.lo}–${t.dataset.hi} kN</span></div>`
+    + `<div><span class="tt-k">Cycles </span><span class="tt-v">${(+t.dataset.c).toLocaleString()}</span></div>`;
+  tip.style.opacity = 1;
+  tip.style.left = Math.min(e.clientX+14, innerWidth-tip.offsetWidth-8)+'px';
+  tip.style.top  = (e.clientY-tip.offsetHeight-10)+'px';
+});
+$('hist').addEventListener('mouseleave', ()=>{ $('tooltip').style.opacity=0; });
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Commands
+ * ═══════════════════════════════════════════════════════════════════════ */
+const readEvent = () => send('GET_LAST_EVENT');
+
+/*
+ * Ordered, and now genuinely sequential.
+ *
+ * GET_CONFIG is a paced multi-line STREAM on the node and there is only one
+ * stream slot: arming another aborts it (ss_spp.c, arm_stream). This function
+ * previously fired all eight commands as fast as the browser would take them,
+ * so the settings table was populated from whatever fraction of the config
+ * stream escaped before GET_CAL cut it off -- a partial configuration that
+ * looks complete, which is the worst way to be wrong about a node's settings.
+ *
+ * Each await now returns when the NODE has answered, so the stream finishes
+ * before anything can disturb it. GET_CONFIG goes last of the streaming
+ * commands for the same reason.
+ */
+async function refreshAll() {
+  await send('STATUS');
+  await send('GET_DIAG');
+  await send('GET_MODE');
+  await send('GET_TIME');
+  await send('GET_CAL');
+  await send('GET_WAKE');
+  await send('GET_CLOUD_STATUS');
+  await send('GET_CONFIG');
+}
+function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} $('btn-live').textContent='Live poll: off'; }
+function toggleLive(){
+  if (liveTimer) { stopLive(); return; }
+  /* 1 Hz. Not faster: on a battery unit each poll keeps the CPU out of EM2,
+   * and during a precision conversion the firmware may refuse entirely. */
+  liveTimer = setInterval(()=>{ demoMode ? demoTick() : send('GET_LIVE'); }, 1000);
+  $('btn-live').textContent = 'Live poll: on';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Wiring
+ * ═══════════════════════════════════════════════════════════════════════ */
+document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav.tabs button').forEach(x => x.setAttribute('aria-selected', x===b));
+  document.querySelectorAll('section[role=tabpanel]').forEach(s => s.hidden = (s.id !== b.dataset.tab));
+});
+
+$('btn-conn').onclick = () => Link.connect();
+/* Explicit disconnect clears the reconnect intent first, so the link layer does
+ * not immediately put back what the operator just took down. */
+$('btn-disc').onclick = () => Link.disconnect();
+$('btn-demo').onclick = loadDemo;
+$('btn-refresh').onclick = refreshAll;
+let modeDirty = false;
+$('m-mode').addEventListener('change', () => { modeDirty = true; });
+$('btn-mode-set').onclick = async () => {
+  await send('SET_MODE=' + $('m-mode').value);
+  modeDirty = false;
+  await send('GET_MODE');
+};
+$('btn-mode-get').onclick = () => { modeDirty = false; send('GET_MODE'); };
+$('btn-live').onclick = toggleLive;
+$('btn-upload').onclick = $('btn-upload2').onclick = () => send('TRIGGER_UPLOAD');
+/* Sends this browser's clock. The modem overwrites it with network time on the
+ * next successful session — that source is more trustworthy, so this is a
+ * bench convenience, not the intended production path. */
+$('btn-settime').onclick = () =>
+  send('SET_TIME=' + Math.floor(Date.now()/1000));
+
+/* Read the sensor now, commit it as an event, upload it. Distinct from
+ * Simulate (synthetic data), Upload now (flushes the queue) and the periodic
+ * idle sample (waits for its interval). Uploads regardless of power regime. */
+$('btn-capture').onclick = () => send('CAPTURE_NOW');
+$('btn-event').onclick = readEvent;
+$('btn-fat').onclick = () => { fatBins.fill(0); send('GET_FATIGUE'); };
+
+/*
+ * Two-step on purpose, matching the firmware: the node refuses a bare
+ * FATIGUE_RESET and requires FATIGUE_RESET=ERASE. A confirm() alone would put
+ * an irreversible action one stray click away in a console whose other buttons
+ * are all harmless reads.
+ */
+$('btn-fat-reset').onclick = async () => {
+  if (!confirm('Permanently clear this node\u2019s lifetime fatigue damage and '
+             + 'cycle history?\n\nThe S-N curve, calibration and queued events '
+             + 'are kept. This cannot be undone.')) return;
+  await send('FATIGUE_RESET=ERASE');
+  await send('GET_FATIGUE');
+};
+$('btn-tbl').onclick = () => { const w=$('tbl-wrap'); w.hidden=!w.hidden;
+  $('btn-tbl').textContent = w.hidden?'Show table':'Hide table'; };
+
+/* Commissioning */
+$('btn-site').onclick = async () => { await send('SET_SITE='+$('c-site').value.trim()); await send('COMMIT_CFG'); };
+$('btn-cell-rd').onclick = () => send('GET_CAL');
+$('btn-cell-wr').onclick = async () => {
+  await send('SET_CFG_CAPACITY_KN='+parseFloat($('c-cap').value));
+  await send('SET_CFG_MV_PER_V='+parseFloat($('c-mvv').value));
+  await send('SET_CFG_PGA_GAIN='+parseInt($('c-gain').value,10));
+  await send('SET_CFG_VREF_MV='+parseInt($('c-vref').value,10));
+  await send('COMMIT_CFG'); await send('GET_CAL');
+  $('cell-note').textContent = 'Applied. Any previous span calibration was cleared.';
+};
+$('btn-tare').onclick  = () => send('CAL_TARE');
+$('btn-span').onclick  = () => {
+  const v = parseFloat($('k-known').value);
+  if (!(v > 0)) { $('cal-note').textContent = 'Enter the applied load in kN first.'; return; }
+  send('CAL_SPAN='+v);
+};
+$('btn-calclr').onclick = () => send('CAL_CLEAR');
+/* Intent is tracked in a variable, never read back out of the button label:
+ * the label is a view of device state, and deriving the next command from it
+ * meant one stray line could wedge the toggle. The device remains the
+ * authority — the label only changes when STREAM= comes back. */
+let streamOn = false;
+$('btn-stream').onclick = () => send('STREAM=' + (streamOn ? 0 : 1));
+['c-mvv','c-gain','c-vref'].forEach(id => $(id).addEventListener('input', recalcCell));
+
+/* Trigger */
+/* ── Profiling: per-second peak deviation ─────────────────────────────────────
+ *
+ * One run is plotted at a time. Two runs in one chart would invite reading
+ * second 7 of the idle profile against second 7 of the train profile, and those
+ * two seconds have nothing to do with each other — the comparison that matters
+ * is between their PEAKS, which is what the two reference rules carry.
+ *
+ * Colour follows the run, not its rank: baseline is always --series-1 and train
+ * is always --series-2, whichever is on screen. The threshold and peak rules are
+ * annotations, not series, so they wear text tokens — an amber rule over the
+ * orange train bars fails CVD separation (ΔE 4.8 deutan in dark), and that rule
+ * is the one line an installer has to be able to read.
+ */
+const PROF = {
+  base:  { secs: [], peak: 0, ref: null, done: false },
+  train: { secs: [], peak: 0, done: false },
+  show: 'base',
+  suggest: 0,
+};
+
+function profRunFor(kind) { return kind === 'TRAIN' ? PROF.train : PROF.base; }
+
+function chartRender() {
+  const svg = $('chart');
+  if (!svg) return;
+  const run  = PROF.show === 'train' ? PROF.train : PROF.base;
+  const other = PROF.show === 'train' ? PROF.base : PROF.train;
+  const data = run.secs;
+
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (t, a) => { const e = document.createElementNS(NS, t);
+    for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+  const padL = 46, padR = 16, padT = 12, padB = 26;
+  const barW = 9, gap = 2;                    /* 2px surface gap between bars */
+  const plotW = Math.max(240, data.length * (barW + gap));
+  const H = 190, plotH = H - padT - padB;
+  const W = padL + plotW + padR;
+
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  const tbody = $('chart-table').querySelector('tbody');
+  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+  if (!data.length) {
+    svg.appendChild(mk('text', { x: padL, y: H / 2, fill: 'var(--text-muted)',
+      'font-size': 12 })).textContent = 'No profile yet — run one above.';
+    return;
+  }
+
+  /*
+   * Scale on THIS run plus the threshold — deliberately not on the other run's
+   * peak. A train peaks 15x higher than a quiet bridge, and including it would
+   * squash the twenty baseline bars into invisible slivers along the axis,
+   * destroying the only detail the baseline chart exists to show.
+   *
+   * The threshold IS included, because seeing it sit clear of the idle noise is
+   * the judgement the operator is here to make.
+   */
+  const top = Math.max(...data, PROF.suggest || 0) * 1.12 || 1;
+  const otherFits = other.peak > 0 && other.peak <= top;
+  const y = v => padT + plotH - (v / top) * plotH;
+
+  /* Axes: recessive. */
+  svg.appendChild(mk('line', { x1: padL, y1: padT + plotH, x2: padL + plotW,
+    y2: padT + plotH, stroke: 'var(--border-strong)', 'stroke-width': 1 }));
+
+  for (const frac of [0, 0.5, 1]) {
+    const v = top * frac, yy = y(v);
+    if (frac > 0) svg.appendChild(mk('line', { x1: padL, y1: yy, x2: padL + plotW,
+      y2: yy, stroke: 'var(--border)', 'stroke-width': 1 }));
+    const t = mk('text', { x: padL - 6, y: yy + 4, fill: 'var(--text-muted)',
+      'font-size': 10, 'text-anchor': 'end' });
+    t.textContent = Math.round(v);
+    svg.appendChild(t);
+  }
+  const yl = mk('text', { x: 4, y: padT + 8, fill: 'var(--text-secondary)',
+    'font-size': 10 });
+  yl.textContent = 'mg';
+  svg.appendChild(yl);
+
+  const colour = PROF.show === 'train' ? 'var(--series-2)' : 'var(--series-1)';
+  const tip = $('chart-tip');
+
+  data.forEach((v, i) => {
+    const x = padL + i * (barW + gap);
+    const h = Math.max(1, (v / top) * plotH);
+    const r = mk('rect', { x, y: padT + plotH - h, width: barW, height: h,
+      rx: 3, fill: colour });
+    /* Hit target wider than the mark, so a 9px bar is still hoverable. */
+    const hit = mk('rect', { x: x - 1, y: padT, width: barW + 2, height: plotH,
+      fill: 'transparent' });
+    hit.addEventListener('pointerenter', ev => {
+      tip.textContent = `${i} s · ${v} mg`;
+      tip.style.opacity = '1';
+      tip.style.left = (ev.clientX + 12) + 'px';
+      tip.style.top  = (ev.clientY - 28) + 'px';
+    });
+    hit.addEventListener('pointerleave', () => { tip.style.opacity = '0'; });
+    svg.appendChild(r);
+    svg.appendChild(hit);
+
+    const tr = document.createElement('tr');
+    const a = document.createElement('td'), b = document.createElement('td');
+    a.textContent = i; b.textContent = v;
+    a.style.cssText = 'padding:2px 8px;color:var(--text-secondary)';
+    b.style.cssText = 'padding:2px 8px;text-align:right;color:var(--text-primary)';
+    tr.append(a, b); tbody.appendChild(tr);
+  });
+
+  /* Reference rules, direct-labelled — identity never rests on colour alone. */
+  const rule = (v, label, dash, ink) => {
+    if (!v || v <= 0) return;
+    const yy = y(v);
+    svg.appendChild(mk('line', { x1: padL, y1: yy, x2: padL + plotW, y2: yy,
+      stroke: ink, 'stroke-width': 2, 'stroke-dasharray': dash }));
+    const t = mk('text', { x: padL + 4, y: yy - 4, fill: ink, 'font-size': 10 });
+    t.textContent = label;
+    svg.appendChild(t);
+  };
+  rule(PROF.suggest, `threshold ${Math.round(PROF.suggest)} mg`, '', 'var(--text-primary)');
+  if (otherFits) {
+    rule(other.peak,
+         (PROF.show === 'train' ? 'idle peak ' : 'train peak ') + Math.round(other.peak),
+         '4 3', 'var(--text-muted)');
+  }
+
+  /* An off-scale comparison peak is stated in words rather than dropped, or the
+   * chart would quietly stop telling the operator what the other run measured. */
+  const otherNote = (other.peak > 0 && !otherFits)
+    ? ` ${PROF.show === 'train' ? 'Idle' : 'Train'} peak ${Math.round(other.peak)} mg `
+      + `is above this scale.`
+    : '';
+
+  $('chart-sub').textContent =
+    `${PROF.show === 'train' ? 'Train' : 'Baseline'} run · ${data.length} s · ` +
+    `peak ${Math.round(run.peak)} mg. Each bar is the largest deviation in that second — ` +
+    `the same quantity the ADXL367 compares against its threshold.` + otherNote;
+}
+
+function chartShow(which) {
+  PROF.show = which;
+  $('btn-show-base').setAttribute('aria-pressed', String(which === 'base'));
+  $('btn-show-train').setAttribute('aria-pressed', String(which === 'train'));
+  chartRender();
+}
+
+let PROF_ACTIVE = 'base';
+
+$('btn-prof-base').onclick  = () => send('PROFILE=BASELINE');
+$('btn-prof-train').onclick = () => send('PROFILE=TRAIN');
+$('btn-prof-stop').onclick  = () => send('PROFILE=STOP');
+$('btn-show-base').onclick  = () => chartShow('base');
+$('btn-show-train').onclick = () => chartShow('train');
+$('btn-prof-apply').onclick = () => {
+  if (!PROF.suggest) { log('No suggested threshold yet — profile a train first.', 'err'); return; }
+  $('w-act').value = PROF.suggest.toFixed(1);
+  /* The quiet threshold has to stay below the activity threshold or the part can
+   * never decide the bridge went quiet; half is a conventional, safe split. */
+  $('w-inact').value = Math.max(5, PROF.suggest / 2).toFixed(1);
+};
+$('btn-fat-save').onclick = async () => {
+  await send('SET_CFG_FAT_DETAIL_MPA='    + parseFloat($('f-detail').value));
+  await send('SET_CFG_FAT_SLOPE_M='       + parseFloat($('f-slope').value));
+  await send('SET_CFG_FAT_CUTOFF_MPA='    + parseFloat($('f-cutoff').value));
+  /* Stress last: it is the one that flips FAT_CALIBRATED, so the curve it
+   * calibrates is already in place when it lands. */
+  await send('SET_CFG_FAT_STRESS_PER_KN=' + parseFloat($('f-stress').value));
+  await send('COMMIT_CFG');
+  await send('GET_FATIGUE');
+};
+$('btn-wake-save').onclick = async () => {
+  const a = parseFloat($('w-act').value), i = parseFloat($('w-inact').value);
+  if (!(a > i)) {
+    alert('The quiet threshold must sit below the activity threshold, or the '
+        + 'same vibration both starts and ends a train and the part never sleeps.');
+    return;
+  }
+  /* Quiet first: the node rejects a config where inactivity >= activity, and
+   * writing activity down before inactivity would trip that check on the way. */
+  await send('SET_CFG_INACTIVITY_MG=' + i);
+  await send('SET_CFG_ACTIVITY_MG=' + a);
+  await send('SET_CFG_ACTIVITY_TIME_MS=' + parseInt($('w-acttime').value, 10));
+  await send('SET_CFG_INACTIVITY_MS='   + parseInt($('w-inacttime').value, 10));
+  await send('SET_CFG_WAKE_CONFIRM_MS=' + parseInt($('w-confirm').value, 10));
+  await send('SET_CFG_PROFILE_BASE_S='  + parseInt($('w-pbase').value, 10));
+  await send('SET_CFG_PROFILE_TRAIN_S=' + parseInt($('w-ptrain').value, 10));
+  await send('SET_CFG_ACCEL_RATE_HZ='   + parseInt($('w-arate').value, 10));
+  await send('SET_CFG_TRAIN_TIMEOUT_S=' + parseInt($('w-timeout').value, 10));
+  await send('SET_CFG_HEALTH_CHECK_S='  + parseInt($('w-healthint').value, 10));
+  await send('SET_CFG_ACCEL_AXIS_MASK=' + parseInt($('w-axmask').value, 10));
+  await send('COMMIT_CFG');
+  await send('GET_WAKE');
+};
+['w-act','w-inact'].forEach(id => $(id).addEventListener('input', chartRender));
+
+/* Cloud */
+$('btn-prov-rd').onclick = async () => { await send('GET_CLOUD_STATUS'); await send('GET_TB_TOKEN'); };
+$('btn-prov-wr').onclick = async () => {
+  const t=$('p-token').value.trim(), h=$('p-host').value.trim(), p=$('p-port').value.trim();
+  if (t) await send('SET_TB_TOKEN='+t);
+  if (h) await send('SET_TB_HOST='+h);
+  if (p) await send('SET_TB_PORT='+p);
+  await send('SET_APN='+$('p-apn').value.trim());
+  await send('COMMIT_CFG');
+  $('prov-note').textContent = 'Committed.';
+};
+$('btn-cloud-wr').onclick = async () => {
+  await send('SET_CFG_UPLOAD_POLICY='    + $('cl-policy').value);
+  await send('SET_CFG_UPLOAD_MIN_GAP_S=' + parseInt($('cl-gap').value, 10));
+  await send('SET_CFG_POWER_SOURCE='     + $('cl-src').value);
+  await send('SET_CFG_UPLOAD_INT_MIN='+parseInt($('cl-int').value,10));
+  await send('SET_CFG_ENABLE_BASELINE='+$('cl-base').value);
+  await send('SET_CFG_BASELINE_INT_MIN='+parseInt($('cl-bint').value,10));
+  await send('SET_CFG_BASELINE_DUR_S='+parseInt($('cl-bdur').value,10));
+  await send('COMMIT_CFG');
+};
+
+/* Diagnostics */
+$('btn-ad-probe').onclick = () => { setTxt('a-hint',''); send('AD_PROBE'); };
+$('btn-ad-short').onclick = () => send('AD_READ=9,1');
+$('btn-ad-load').onclick  = () => send('AD_READ');
+$('btn-ad-temp').onclick  = () => send('AD_TEMP');
+$('btn-ad-cal').onclick   = () => send('AD_CAL');
+$('btn-acc-probe').onclick = () => send('ACC_PROBE');
+$('btn-acc-read').onclick  = () => send('ACC_READ');
+let accTimer = null;
+$('btn-acc-live').onclick = () => {
+  if (accTimer) { clearInterval(accTimer); accTimer = null; }
+  /* One read now averages 32 samples paced to the 100 Hz ODR, so it occupies
+   * the node for about 350 ms. Polling every 500 ms would leave it almost no
+   * idle time and starve the SPP stream. */
+  else { accTimer = setInterval(() => send('ACC_READ'), 1500); }
+  $('btn-acc-live').textContent = 'Live: ' + (accTimer ? 'on' : 'off');
+};
+
+$('btn-mdm-info').onclick = () => send('MODEM_INFO');
+$('btn-mdm-test').onclick = () => send('MODEM_TEST');
+$('btn-mdm-on').onclick   = () => send('MODEM_ON');
+$('btn-mdm-off').onclick  = () => send('MODEM_OFF');
+$('btn-mdm-dbg').onclick  = () =>
+  send('MODEM_DEBUG=' + ($('btn-mdm-dbg').textContent.endsWith('on') ? 0 : 1));
+$('btn-pins').onclick = () => send('GET_PINS');
+$('btn-mem').onclick = () => { setTxt('g-mem','—'); send('GET_MEM'); };
+$('btn-trace').onclick = () => { traceRows = []; send('GET_TRACE'); };
+$('btn-ms').onclick = () => {
+  for (const id of ['ms-at','ms-sim','ms-iccid','ms-imei','ms-reg','ms-oper',
+                    'ms-mode','ms-csq','ms-rsrp','ms-sinr']) setTxt(id, '...');
+  $('ms-hint').style.display = 'none';
+  send('MODEM_STATUS');
+};
+$('btn-ms-off').onclick = () => send('MODEM_OFF');
+$('btn-simtrain').onclick = () => send('SIM_TRAIN');
+$('btn-reboot').onclick = () => { if (confirm('Reboot the node?')) send('REBOOT'); };
+
+/* Settings */
+$('btn-cfg-rd').onclick = () => send('GET_CONFIG');
+$('btn-cfg-wr').onclick = writeConfig;
+$('btn-cfg-exp').onclick = exportCsv;
+$('btn-cfg-imp').onclick = () => $('cfg-file').click();
+$('cfg-file').onchange = e => { const f=e.target.files[0];
+  if (f) f.text().then(importCsv); e.target.value=''; };
+
+/* Terminal */
+$('btn-send').onclick = () => { const v=$('cmd').value.trim(); if(v){send(v);$('cmd').value='';} };
+$('cmd').addEventListener('keydown', e => { if (e.key==='Enter') $('btn-send').click(); });
+$('btn-clear').onclick = () => { $('log').innerHTML=''; };
+$('btn-save').onclick = () => {
+  const txt = [...$('log').children].map(d=>d.textContent).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
+  a.download = 'strusense_'
+    + new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0,19)
+        .replace(/[:T]/g,'-') + '_IST.log';
+  a.click(); URL.revokeObjectURL(a.href);
+};
+
+$('btn-theme').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme',
+    cur==='dark' ? 'light' : cur==='light' ? 'dark'
+    : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark'));
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Demo — every panel populated, no hardware. Shows the state a bench node
+ * is actually in: ADXL not fitted, cell uncalibrated.
+ * ═══════════════════════════════════════════════════════════════════════ */
+function loadDemo() {
+  demoMode = true; setConnUI(false);
+  $('conn-t').textContent = 'Demo data (not connected)';
+  ['MODE=1,MONITORING','FW=0.6.0-dev','BOARD=StruSense-A','UPTIME_S=386420','RSTCAUSE=POWER_ON',
+   'CSQ=22','PENDING=3','LIFE_EVENTS=1482','SENSOR_FAULTS=0','WDT_RESETS=1',
+   'TEMP_C=18.44','BATT_MV=3592','SITE=GDV-S3-N07',
+   'CAL_VALID=0','CAL_ZERO=0','CAL_SPAN=1.00000','CAPACITY_KN=150.0','MV_PER_V=2.000',
+   'PGA_GAIN=128','VREF_UV=3000000,AUTO','FS_UV=3000.0',
+   'WAKE_SOURCE=ACCEL','WAKE_ACCEL_PRESENT=1',
+   'ACT_MG=118.0','INACT_MG=59.0','ACTIVITY_TIME_MS=120','INACTIVITY_MS=2000',
+   'WAKE_CONFIRM_MS=400','AUTOSLEEP=1','ACCEL_REF_VALID=1',
+   'ACCEL_REF=11.4,-6.2,1002.8','PROFILE_BASE_S=60','PROFILE_TRAIN_S=60',
+   'FALSE_WAKES=4','HEALTH_CHECK_S=60','HEALTH_REPAIRS=0','HEALTH_LAST=OK',
+   'ACCEL_AXIS_MASK=0,XYZ',
+   'MONITOR=1,ACCEL_INT,25,thr=118,act=3,inact=50,sleep=1',
+   'EV_TS=1785000000','EV_DUR_MS=23400','EV_PEAK_KN=118.62','EV_MEAN_KN=74.15',
+   'EV_RMS_KN=79.03','EV_PEAK_MG=1642.0','EV_CYCLES=214','EV_FLAGS=0',
+   'FAT_FULLSCALE_KN=150','FAT_DAMAGE=0.0412','FAT_CALIBRATED=0',
+   'FAT_STRESS_PER_KN=0.0000','FAT_DETAIL_MPA=80.0','FAT_SLOPE_M=3.00',
+   'FAT_CUTOFF_MPA=29.0','TIME_SRC=SET',
+   'FAT_HINT=no stress_per_kn - damage is a placeholder. Set SET_CFG_FAT_STRESS_PER_KN=<MPa per kN>',
+   'TB_HOST=dashboard.bridgethings.com','TB_PORT=1883','TB_TOKEN=20A71696957B_TOKEN',
+   'TB_TOKEN_SET=0','APN=','CLOUD_READY=1',
+   'ACC_PART=ADXL367','ACC_ADDR=0x53',
+   'ACC_ID=0xAD/0x1D/0xF7,expect=0xAD/0x1D/0xF7,MATCH','ACC_REV=0x03',
+   'ACC_MEASURING=1','ACC_REGS=status 0x01,filter 0x13,power 0x02',
+   'ACC_INT_WIRED=1','ACC_PROBE=OK',
+   'ACC_READ=12.5,-7.8,998.4,|a|=998.5,raw=51/-32/4072',
+   'ACC_AVG=0.20,25.05,1001.54,n=32','ACC_NOISE=2.32,2.11,2.13,sensor noise only',
+   'ACC_TILT=0.72,-0.45','ACC_TILT_CHANGE=0.11,-0.06',
+   'MDM_TX=PB00','MDM_RX=PB01','MDM_PWR=PA00 LVL=1 ACT=1','MDM_RST=PA08 LVL=0 ACT=1',
+   'STREAM=0','UTC_NOW=1785000000','TIME_VALID=1','MI_IMEI=860123456789012','MI_ICCID=8991000012345678901','MI_REV=A7672E-FASE','MI_CSQ=22'
+  ].forEach(handleLine);
+
+  /* A demo profile pair, so the chart shows the shape of a real decision
+   * offline: a quiet site around 30 mg and a train peaking near 500. */
+  ['PROFILE=1,BASELINE,60,25'].forEach(handleLine);
+  handleLine('PROFILE_SEC=0,' + Array.from({length:10},(_,i)=>22+((i*7)%13)).join(','));
+  handleLine('PROFILE_SEC=10,'+ Array.from({length:10},(_,i)=>19+((i*5)%15)).join(','));
+  handleLine('PROFILE_STATS=peak=34.0,rms=12.1,mean=9.4');
+  handleLine('PROFILE_DONE=BASELINE,OK,20,500');
+  handleLine('PROFILE_REF_SAVED=OK');
+  PROF_ACTIVE = 'train';
+  handleLine('PROFILE_SEC=0,' + [40,180,470,510,495,430,300,150,70,45].join(','));
+  handleLine('PROFILE_STATS=peak=512.0,rms=210.0,mean=140.0');
+  handleLine('PROFILE_DONE=TRAIN,OK,10,250');
+  handleLine('PROFILE_SUGGEST=132.0,sep=15.1');
+  PROF_ACTIVE = 'base';
+
+  CFG.forEach(r => { if (isHeading(r)) return;
+    const d = {CAPACITY_KN:150,MV_PER_V:2,PGA_GAIN:128,VREF_MV:0,ADC_CHOP:0,
+      ACTIVITY_MG:118,INACTIVITY_MG:59,ACTIVITY_TIME_MS:120,INACTIVITY_MS:2000,
+      WAKE_CONFIRM_MS:400,PROFILE_BASE_S:60,PROFILE_TRAIN_S:60,
+      TRAIN_TIMEOUT_S:180,LOAD_RATE_HZ:100,ACCEL_RATE_HZ:25,
+      LOAD_END_FRAC:0.1,POWER_SOURCE:1,UPLOAD_POLICY:0,UPLOAD_MIN_GAP_S:0,
+      UPLOAD_INT_MIN:60,UPLOAD_RETRIES:2,
+      ENABLE_BASELINE:1,BASELINE_INT_MIN:30,BASELINE_DUR_S:5,CHAR_BATCH_S:60,
+      ENABLE_BLE:1,ENABLE_LTE:1,ENABLE_SD:0}[r[0]];
+    if (d !== undefined) { setCfgField(r[0], d); mirrorToPanels(r[0], d); }
+  });
+
+  fatBins = Array.from({length:32},(_,i)=>
+    Math.round(48000*Math.exp(-i/3.4) + (i>24 ? 140*Math.exp(-((i-28)**2)/6) : 0)));
+  drawHistogram();
+  const _demoTune = Array.from({length:60},(_,i)=>{
+    const train = (i>12&&i<21)||(i>40&&i<47);
+    return Math.round(train ? 480+260*Math.sin((i%8)/8*Math.PI) : 28+Math.random()*16);
+  });
+  void _demoTune; demoTick();
+  log('Demo data loaded — no device attached.');
+}
+function demoTick() {
+  const t = Date.now()/1000;
+  handleLine('LOAD_KN=' + (74 + 3.4*Math.sin(t/3) + 1.1*Math.sin(t*1.7)).toFixed(2));
+  handleLine('TEMP_C=' + (18.4 + 0.35*Math.sin(t/11)).toFixed(2));
+}
+
+if (!navigator.bluetooth) $('compat').hidden = false;
+chartShow('base'); paintMode(1); drawHistogram(); recalcCell();
+log('Ready. Connect to a node, or press Demo to explore the console.');
+</script>
+</body>
+</html>
