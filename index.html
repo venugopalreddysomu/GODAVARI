@@ -103,6 +103,20 @@ section[role=tabpanel][hidden]{display:none}
   font-family:ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 .tile .u{font-size:11px;font-weight:500;color:var(--text-muted);margin-left:2px}
 
+.tile .sub{margin-top:3px;font-size:11px;line-height:1.35}
+.tile.lv-main{border-color:color-mix(in srgb,var(--series-1) 55%,var(--border))}
+.tile.lv-main .v{font-size:26px}
+.lv-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:11px}
+.lv-chart{margin-top:11px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:8px 10px}
+.lv-chart svg{display:block;width:100%;height:96px}
+.lv-chart .ln{fill:none;stroke:var(--series-1);stroke-width:1.8;vector-effect:non-scaling-stroke}
+.lv-chart .mean{stroke:var(--warn);stroke-width:1;stroke-dasharray:4 3;vector-effect:non-scaling-stroke}
+.lv-axis{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text-muted);
+  font-family:ui-monospace,Menlo,Consolas,monospace}
+.lv-h{font-size:14px;margin:18px 0 8px}
+.dl-bar{height:6px;border-radius:3px;background:var(--surface-2);border:1px solid var(--border);
+  margin-top:10px;overflow:hidden}
+.dl-bar>div{height:100%;width:0;background:var(--series-1);transition:width .25s linear}
 .kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
   border-bottom:1px solid var(--border);font-size:13px}
 .kv:last-child{border-bottom:none}
@@ -161,6 +175,9 @@ input:focus,select:focus{outline:2px solid var(--series-1);outline-offset:-1px}
 .notice.info{border-left-color:var(--series-1)}
 .notice.good{border-left-color:var(--good)}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+/* A changed-but-unsaved field, so a half-finished edit is visible at a glance. */
+#cfg-table [data-edited="1"]{outline:2px solid var(--warn);outline-offset:-1px}
+#cfg-table tr[hidden]{display:none}
 ol.steps{margin:8px 0 0 20px;font-size:13px;color:var(--text-secondary);line-height:1.7}
 ol.steps b{color:var(--text-primary)}
 </style>
@@ -180,6 +197,7 @@ ol.steps b{color:var(--text-primary)}
   <button id="btn-theme" title="Light / dark">&#9681;</button>
 </header>
 
+<div class="notice" id="busy-notice" role="alert" hidden></div>
 <div class="notice" id="compat" hidden>
   <b>Web Bluetooth unavailable.</b> Use Chrome or Edge on desktop or Android.
   Safari and Firefox do not implement it. Opening this file directly
@@ -190,7 +208,9 @@ ol.steps b{color:var(--text-primary)}
   <button role="tab" data-tab="t-dash"  aria-selected="true">Dashboard</button>
   <button role="tab" data-tab="t-comm"  aria-selected="false">Commissioning</button>
   <button role="tab" data-tab="t-trig"  aria-selected="false">Trigger</button>
+  <button role="tab" data-tab="t-adxl-test" aria-selected="false">ADXL test</button>
   <button role="tab" data-tab="t-data"  aria-selected="false">Data</button>
+  <button role="tab" data-tab="t-life"  aria-selected="false">Lifecycle</button>
   <button role="tab" data-tab="t-cloud" aria-selected="false">Cloud</button>
   <button role="tab" data-tab="t-diag"  aria-selected="false">Diagnostics</button>
   <button role="tab" data-tab="t-cfg"   aria-selected="false">All settings</button>
@@ -198,6 +218,41 @@ ol.steps b{color:var(--text-primary)}
 </nav>
 
 <!-- ══════════════════════════ DASHBOARD ══════════════════════════ -->
+<section role="tabpanel" id="t-adxl-test" hidden>
+  <div class="card wide">
+    <h2>ADXL trigger test</h2>
+    <p>Start, tap the fixture, and check the result. Setup test only — no load capture or upload.</p>
+    <div class="row">
+      <button id="btn-adxl-start" class="primary">Start validation in Setup</button>
+      <button id="btn-adxl-status">Read interrupt status</button>
+      <button id="btn-adxl-clear">Clear &amp; rearm now</button>
+      <button id="btn-adxl-stop">Stop validation &amp; disarm</button>
+      <button id="btn-adxl-export">Export test log</button>
+    </div>
+    <div class="notice" id="ax-verdict" role="status">Not tested. Start validation, then apply a brief tap.</div>
+    <div class="tiles">
+      <div class="tile"><div class="k">Trigger</div><div class="v" id="ax-trigger-simple">Waiting</div></div>
+      <div class="tile"><div class="k">Result</div><div class="v" id="ax-result-simple">—</div></div>
+      <div class="tile"><div class="k">Rearmed?</div><div class="v" id="ax-ready-simple">—</div></div>
+    </div>
+    <pre id="ax-log" style="max-height:320px;overflow:auto;white-space:pre-wrap" aria-label="ADXL trigger results"></pre>
+    <details><summary>Technical details</summary>
+    <div class="tiles">
+      <div class="tile"><div class="k">Phase</div><div class="v" id="ax-phase">—</div></div>
+      <div class="tile"><div class="k">INT1 / INT2</div><div class="v" id="ax-pins">—</div></div>
+      <div class="tile"><div class="k">AWAKE / armed</div><div class="v" id="ax-armed">—</div></div>
+      <div class="tile"><div class="k">GPIO edges / held</div><div class="v" id="ax-edges">—</div></div>
+    </div>
+    <div class="kv"><span class="k">Activity / inactivity thresholds</span><span class="v" id="ax-thresholds">—</span></div>
+    <div class="kv"><span class="k">Confirmation: peak / qualifying samples</span><span class="v" id="ax-confirm">—</span></div>
+    <div class="kv"><span class="k">Last rearm</span><span class="v" id="ax-rearm">—</span></div>
+    <div class="kv"><span class="k">ADC / modem power</span><span class="v" id="ax-power">—</span></div>
+    <div class="kv"><span class="k">Next physical interrupt after clear</span><span class="v" id="ax-next">Not tested</span></div>
+    <pre id="ax-raw-log" style="max-height:320px;overflow:auto;white-space:pre-wrap" aria-label="Raw ADXL diagnostics"></pre>
+    </details>
+  </div>
+</section>
+
 <section role="tabpanel" id="t-dash">
   <div class="card wide" style="margin-bottom:13px">
     <h2>Live state</h2>
@@ -246,7 +301,9 @@ ol.steps b{color:var(--text-primary)}
 
     <div class="card">
       <h2>Node</h2>
-      <div class="kv"><span class="k">Site</span><span class="v" id="d-site">&mdash;</span></div>
+      <div class="kv"><span class="k">Name</span><span class="v" id="d-name">&mdash;</span></div>
+      <div class="kv"><span class="k">BLE address</span><span class="v" id="d-mac">&mdash;</span></div>
+      <div class="kv"><span class="k">Site label</span><span class="v" id="d-site">&mdash;</span></div>
       <div class="kv"><span class="k">Firmware</span><span class="v" id="d-fw">&mdash;</span></div>
       <div class="kv"><span class="k">Board</span><span class="v" id="d-board">&mdash;</span></div>
       <div class="kv"><span class="k">Uptime</span><span class="v" id="d-up">&mdash;</span></div>
@@ -254,6 +311,23 @@ ol.steps b{color:var(--text-primary)}
       <div class="kv"><span class="k">Clock source</span><span class="v" id="t-timesrc">&mdash;</span></div>
       <div class="kv"><span class="k">Reset cause</span><span class="v" id="d-rst">&mdash;</span></div>
       <div class="kv"><span class="k">Watchdog resets</span><span class="v" id="d-wdt">&mdash;</span></div>
+
+      <div class="cfg-row" style="margin-top:11px">
+        <label for="d-rename">Rename</label>
+        <input type="text" id="d-rename" maxlength="23" placeholder="e.g. LDP001LT">
+        <span class="rng">23 chars</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="sm" id="btn-rename">Apply name</button>
+        <button class="sm danger" id="btn-reboot2">Reboot node</button>
+      </div>
+      <div class="sub" style="margin-top:8px">
+        This is the device label Kinetix knows the node by &mdash; the
+        <code>{device}</code> segment of every topic it publishes to &mdash; and
+        it is what the node advertises over Bluetooth. One name, so a technician
+        at the pier sees the same string as the dashboard. Applying it
+        re-advertises immediately; no reboot needed.
+      </div>
     </div>
     <div class="card">
       <h2>Readiness</h2>
@@ -264,7 +338,7 @@ ol.steps b{color:var(--text-primary)}
       <div class="kv"><span class="k">Cloud provisioned</span><span class="v" id="r-cloud">&mdash;</span></div>
       <div class="kv"><span class="k">Accelerometer</span><span class="v" id="r-accel">&mdash;</span></div>
       <div class="kv"><span class="k">Monitoring armed</span><span class="v" id="r-armed">&mdash;</span></div>
-      <div class="kv"><span class="k">Sending regime</span><span class="v" id="r-regime">&mdash;</span></div>
+      <div class="kv"><span class="k">Uploads</span><span class="v" id="r-regime">after each capture &middot; hourly (IST)</span></div>
       <div class="kv"><span class="k">LTE signal (CSQ)</span><span class="v" id="d-rssi">&mdash;</span></div>
       <div class="kv"><span class="k">Lifetime events</span><span class="v" id="d-ev">&mdash;</span></div>
     </div>
@@ -318,17 +392,10 @@ ol.steps b{color:var(--text-primary)}
         </select>
         <span class="rng">128 typical</span>
       </div>
-      <div class="cfg-row">
-        <label for="c-vref">Excitation</label>
-        <select id="c-vref">
-          <option value="0">3000 mV (this board&rsquo;s regulated reference)</option>
-          <option value="3300">3300 mV</option>
-          <option value="5000">5000 mV</option>
-          <option value="2500">2500 mV</option>
-        </select>
-        <span class="rng">display only &mdash; kN is ratiometric</span>
-      </div>
       <div class="kv" style="margin-top:8px">
+        <span class="k">Bridge excitation</span><span class="v" id="c-exc">3000 mV, regulated</span>
+      </div>
+      <div class="kv">
         <span class="k">Full-scale differential</span><span class="v" id="c-fs">&mdash;</span>
       </div>
       <div class="kv"><span class="k">Span used of ADC range</span><span class="v" id="c-span-used">&mdash;</span></div>
@@ -337,6 +404,54 @@ ol.steps b{color:var(--text-primary)}
         <button class="sm primary" id="btn-cell-wr">Apply</button>
       </div>
       <div class="sub" id="cell-note" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <h2>4 &middot; What the node sends</h2>
+      <div class="cfg-row">
+        <label for="o-qty">Send readings as</label>
+        <select id="o-qty">
+          <option value="0">mV/V (ratiometric, default)</option>
+          <option value="1">Microstrain (&micro;&epsilon;)</option>
+        </select>
+        <span class="rng" id="o-qty-now">&mdash;</span>
+      </div>
+      <div id="o-strain">
+        <div class="cfg-row">
+          <label for="o-gf">Gauge factor</label>
+          <input type="number" id="o-gf" step="0.001" min="0.5" max="5">
+          <span class="rng">0.5&ndash;5 &middot; foil &asymp; 2.0&ndash;2.2</span>
+        </div>
+        <div class="cfg-row">
+          <label for="o-bridge">Bridge type</label>
+          <select id="o-bridge">
+            <option value="0">Quarter (1 active gauge)</option>
+            <option value="1">Half (2 active gauges)</option>
+            <option value="2">Full (4 active gauges)</option>
+          </select>
+          <span class="rng"></span>
+        </div>
+        <div class="cfg-row">
+          <label for="o-zero">Zero offset</label>
+          <input type="number" id="o-zero" step="any" min="-10" max="10">
+          <span class="rng">mV/V &middot; &minus;10 to 10</span>
+        </div>
+      </div>
+      <div class="kv" style="margin-top:8px"><span class="k">Conversion</span><span class="v" id="o-conv">&mdash;</span></div>
+      <div class="kv"><span class="k">Cloud receives</span><span class="v" id="o-keys">&mdash;</span></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm" id="btn-out-rd">Read</button>
+        <button class="sm primary" id="btn-out-wr">Apply</button>
+      </div>
+      <div class="sub" id="out-note" style="margin-top:6px"></div>
+      <div class="notice" style="margin:11px 0 0">
+        <b>Keep mV/V unless you need strain from the node itself.</b> The cloud
+        can chart microstrain from mV/V too (Kinetix &rarr; Devices &rarr; Edit),
+        and a wrong gauge factor there is fixed for all of history. On a load
+        cell, microstrain is the strain in the cell&rsquo;s own element, not the
+        structure&rsquo;s. Switching to microstrain needs STRAIN_PEAK and
+        STRAIN_1S channels on the Kinetix device.
+      </div>
     </div>
   </div>
 
@@ -370,12 +485,105 @@ ol.steps b{color:var(--text-primary)}
           <button class="sm primary" id="btn-span">Set span</button>
           <button class="sm danger" id="btn-calclr">Clear</button>
         </div>
-        <div class="row" style="margin-top:8px">
-          <button class="sm" id="btn-stream">Live stream: off</button>
-          <span class="sub">2 Hz raw / &micro;V / kN &mdash; use it to watch a load settle</span>
-        </div>
+        <div class="sub" style="margin-top:8px">Watch a load settle in <b>5 &middot; Live reading</b> below.</div>
         <div class="sub" id="cal-note" style="margin-top:8px"></div>
       </div>
+    </div>
+  </div>
+
+  <div class="card wide" id="live-card">
+    <h2>5 &middot; Live reading and dead load</h2>
+    <div class="lv-head">
+      <div class="row">
+        <button class="sm primary" id="btn-stream">Live stream: off</button>
+        <span class="badge" id="lv-badge"><span class="dot"></span><span id="lv-state">stopped</span></span>
+      </div>
+      <span class="sub" id="lv-age">Two readings a second from the load-cell input. Nothing is tared.</span>
+    </div>
+    <div class="tiles">
+      <div class="tile lv-main">
+        <div class="k">Bridge output</div>
+        <div class="v"><span id="lv-mvv">&mdash;</span><span class="u">mV/V</span></div>
+        <div class="sub">untared &mdash; the number Kinetix converts</div>
+      </div>
+      <div class="tile">
+        <div class="k">Load</div>
+        <div class="v"><span id="lv-kn">&mdash;</span><span class="u">kN</span></div>
+        <div class="sub" id="lv-kn-sub">&mdash;</div>
+      </div>
+      <div class="tile">
+        <div class="k">Microstrain</div>
+        <div class="v"><span id="lv-ue">&mdash;</span><span class="u">&micro;&epsilon;</span></div>
+        <div class="sub" id="lv-ue-sub">set in 4 &middot; What the node sends</div>
+      </div>
+      <div class="tile">
+        <div class="k">Input voltage</div>
+        <div class="v"><span id="lv-uv">&mdash;</span><span class="u">&micro;V</span></div>
+        <div class="sub" id="lv-uv-sub">across the bridge at 3000 mV</div>
+      </div>
+      <div class="tile">
+        <div class="k">Of rated output</div>
+        <div class="v"><span id="lv-fs">&mdash;</span><span class="u">%</span></div>
+        <div class="sub" id="lv-fs-sub">&mdash;</div>
+      </div>
+      <div class="tile">
+        <div class="k">ADC code</div>
+        <div class="v"><span id="lv-raw">&mdash;</span></div>
+        <div class="sub" id="lv-raw-sub">&mdash;</div>
+      </div>
+    </div>
+    <div class="lv-chart">
+      <svg id="lv-spark" viewBox="0 0 600 96" preserveAspectRatio="none" role="img" aria-label="Bridge output, last 60 seconds"></svg>
+      <div class="lv-axis"><span id="lv-lo">&mdash;</span><span id="lv-span">last 60 s &middot; mV/V</span><span id="lv-hi">&mdash;</span></div>
+    </div>
+
+    <h3 class="lv-h">Measure the dead load</h3>
+    <div class="grid" style="margin-bottom:0">
+      <div>
+        <ol class="steps">
+          <li>No train on the span and nobody working on the deck.</li>
+          <li>Let the bridge warm up: keep the stream running for a couple of
+              minutes first. With Rail mode <i>Switched per reading</i> every
+              sample is on a cold bridge &mdash; use <i>Held for the collection</i>.</li>
+          <li>Press <b>Measure</b>. The raw codes are averaged over the window, so
+              the result is not limited by the rounding of any one reading.</li>
+        </ol>
+        <div class="row" style="margin-top:11px">
+          <select id="dl-secs" aria-label="Averaging window" style="width:auto">
+
+            <option value="30">30 s</option>
+            <option value="60" selected>60 s</option>
+            <option value="120">2 min</option>
+            <option value="300">5 min</option>
+          </select>
+          <button class="sm primary" id="btn-dl">Measure dead load</button>
+          <button class="sm" id="btn-dl-stop" hidden>Stop</button>
+        </div>
+        <div class="dl-bar" id="dl-bar" hidden><div id="dl-fill"></div></div>
+        <div class="sub" id="dl-note" style="margin-top:6px"></div>
+      </div>
+      <div>
+        <div class="kv"><span class="k">Dead load</span><span class="v" id="dl-mvv">&mdash;</span></div>
+        <div class="kv"><span class="k">Equivalent load</span><span class="v" id="dl-kn">&mdash;</span></div>
+        <div class="kv"><span class="k">Readings averaged</span><span class="v" id="dl-n">&mdash;</span></div>
+        <div class="kv"><span class="k">Scatter (1&sigma;)</span><span class="v" id="dl-sd">&mdash;</span></div>
+        <div class="kv"><span class="k">Drift, 1st to 2nd half</span><span class="v" id="dl-drift">&mdash;</span></div>
+        <div class="kv"><span class="k">Lowest / highest</span><span class="v" id="dl-range">&mdash;</span></div>
+        <div class="kv"><span class="k">Verdict</span><span class="v" id="dl-verdict">&mdash;</span></div>
+        <div class="row" style="margin-top:11px">
+          <button class="sm" id="btn-dl-copy" disabled>Copy mV/V</button>
+          <button class="sm" id="btn-dl-zero" disabled>Use as node strain zero</button>
+        </div>
+      </div>
+    </div>
+    <div class="notice info" style="margin:12px 0 0">
+      <b>Entering it in Kinetix</b> (Administration &rarr; Devices &rarr; Edit):
+      as the <b>zero offset (mV/V)</b>, microstrain and load start at 0 under the
+      dead load and show only what traffic adds &mdash; usually what fatigue and
+      traffic monitoring want. Leave the zero at the cell&rsquo;s certificate zero
+      balance (or 0) to chart total strain including the dead load, and record this
+      figure as the <b>dead load (mV/V)</b>. The excitation value is not needed:
+      mV/V is already a ratio.
     </div>
   </div>
 </section>
@@ -660,7 +868,76 @@ ol.steps b{color:var(--text-primary)}
 </section>
 
 <!-- ══════════════════════════ CLOUD ══════════════════════════ -->
+<!-- ══════════════════════════ LIFECYCLE ══════════════════════════ -->
+<section role="tabpanel" id="t-life" hidden>
+  <div class="notice info">
+    Everything this node has accumulated over its service life &mdash; its event
+    numbering, lifetime counters and fatigue history. <b>Read from node</b> first.
+    Changes are typed or imported into the <b>New value</b> column and nothing is
+    written until <b>Apply to node</b>.
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Replacing a node</h2>
+      <ol class="steps">
+        <li><b>Old node still answers?</b> Connect to it, <b>Read from node</b>, then <b>Export file</b>. Keep the file with the site records.</li>
+        <li>Connect to the <b>new</b> node and provision it with the <b>same device label</b> (Cloud tab).</li>
+        <li><b>Import file</b>, check the New value column, then <b>Apply to node</b>.</li>
+        <li><b>Old node dead?</b> Type the values in. The next event number is one more than the last event Kinetix received from this device; lifetime cycles and damage are its last CUM_CYCLES and CUM_DAMAGE readings.</li>
+      </ol>
+      <div class="notice" style="margin:11px 0 0">
+        <b>Why the event number matters.</b> Kinetix recognises an event by device and
+        number. A replacement that starts again at 1 would have its events thrown away
+        as repeats of the old node&rsquo;s until it passed them.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Actions</h2>
+      <div class="row">
+        <button class="sm" id="btn-lc-read">Read from node</button>
+        <button class="sm primary" id="btn-lc-apply">Apply to node</button>
+        <button class="sm" id="btn-lc-clear">Clear new values</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="sm" id="btn-lc-export">Export file</button>
+        <button class="sm" id="btn-lc-import">Import file</button>
+        <input type="file" id="lc-file" accept=".json,application/json" hidden>
+      </div>
+      <div class="sub" id="lc-note" role="status" style="margin-top:8px"></div>
+
+      <h3>Factory default</h3>
+      <div class="sub">
+        Sets every lifetime counter and the whole fatigue history to zero, and restarts
+        event numbering at 1 if nothing is queued. Calibration, settings, provisioning
+        and the S&ndash;N curve are kept. This cannot be undone &mdash; export first.
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="lc-factory-confirm" placeholder="type RESET" style="max-width:140px">
+        <button class="sm danger" id="btn-lc-factory">Reset all to factory default</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card wide" style="margin-bottom:13px">
+    <h2>Event numbering and lifetime counters</h2>
+    <div class="chart-wrap"><table id="lc-table"></table></div>
+  </div>
+
+  <div class="card wide">
+    <h2>Fatigue history &mdash; rainflow cycles per load-range bin</h2>
+    <div class="sub" id="lc-bin-summary" style="margin-bottom:6px"></div>
+    <div class="chart-wrap"><table id="lc-bins"></table></div>
+    <div class="row" style="margin-top:8px">
+      <button class="sm" id="btn-lc-bins-zero">Set all new bins to 0</button>
+      <span class="sub">Cycles may be whole or half (0.5): the node counts in half cycles.</span>
+    </div>
+  </div>
+</section>
+
 <section role="tabpanel" id="t-cloud" hidden>
+  <div class="notice info">Automatic uploads: after Monitoring captures and at the start of each IST hour. Setup/profiling stays offline unless you explicitly run a modem command or Trigger Upload.</div>
   <div class="grid">
     <div class="card" id="ms-card">
       <h2>Modem, SIM and signal</h2>
@@ -698,54 +975,99 @@ ol.steps b{color:var(--text-primary)}
     </div>
 
     <div class="card">
-      <h2>ThingsBoard provisioning</h2>
+      <h2>Kinetix provisioning</h2>
       <div class="notice info">
         Written over <b>BLE only</b>. The cloud cannot change these &mdash; a
-        remote push that rewrote the broker or token could disconnect the node
+        remote push that rewrote the broker or key could disconnect the node
         from the very channel needed to fix it.
       </div>
-      <div class="cfg-row"><label for="p-token">Access token</label>
-        <input type="text" id="p-token" placeholder="from ThingsBoard">
+      <div class="cfg-row"><label for="p-token">Device key</label>
+        <input type="text" id="p-token" placeholder="kxd_&hellip; from Administration &rarr; Device keys">
         <span class="rng" id="p-token-state">&mdash;</span></div>
+      <div class="cfg-row"><label for="p-project">Project code</label>
+        <input type="text" id="p-project" placeholder="prj_&hellip;">
+        <span class="rng">Administration &rarr; Projects</span></div>
+      <div class="cfg-row"><label for="p-device">Device label</label>
+        <input type="text" id="p-device" placeholder="LC-01">
+        <span class="rng">must match the Kinetix device exactly</span></div>
       <div class="cfg-row"><label for="p-host">Broker host</label>
-        <input type="text" id="p-host" placeholder="dashboard.bridgethings.com"><span class="rng"></span></div>
+        <input type="text" id="p-host" placeholder="kinetix.bridgethings.com"><span class="rng"></span></div>
       <div class="cfg-row"><label for="p-port">Broker port</label>
-        <input type="number" id="p-port" min="1" max="65535"><span class="rng">1883</span></div>
+        <input type="number" id="p-port" min="1" max="65535"><span class="rng">8883 with TLS &middot; 1883 plain</span></div>
+      <div class="cfg-row"><label for="p-tls">Connection security</label>
+        <select id="p-tls">
+          <option value="1">TLS encrypted (MQTTS)</option>
+          <option value="0">Plain MQTT &mdash; diagnosis only</option>
+        </select>
+        <span class="rng">port follows the choice</span></div>
       <div class="cfg-row"><label for="p-apn">APN <span class="sub">(blank = auto)</span></label>
         <input type="text" id="p-apn" placeholder="leave blank"><span class="rng"></span></div>
-      <div class="kv" style="margin-top:8px"><span class="k">Cloud ready</span><span class="v" id="p-ready">&mdash;</span></div>
+
+      <!-- The assembled topic, read back from the node rather than built here.
+           A typo in the project or the device is invisible in the fields above
+           and obvious the moment the whole string is shown. -->
+      <div class="kv" style="margin-top:8px"><span class="k">Publishes to</span>
+        <span class="v" id="p-topic" style="font-family:ui-monospace,monospace;font-size:11px">&mdash;</span></div>
+      <div class="kv"><span class="k">Addressable</span><span class="v" id="p-addr">&mdash;</span></div>
+      <div class="kv"><span class="k">Cloud ready</span><span class="v" id="p-ready">&mdash;</span></div>
       <div class="row" style="margin-top:11px">
-        <button class="sm" id="btn-prov-rd">Read</button>
-        <button class="sm primary" id="btn-prov-wr">Write &amp; commit</button>
+        <button class="sm" id="btn-prov-rd">Read back</button>
+        <button class="sm primary" id="btn-prov-wr">Write</button>
       </div>
       <div class="sub" id="prov-note" style="margin-top:6px"></div>
+      <div class="sub" style="margin-top:4px">
+        Each field is stored as it is written, so a reset cannot lose it.
+        <b>Read back</b> asks the node what it actually holds &mdash; worth doing
+        before leaving site, because the write and the store are different things.
+      </div>
     </div>
 
     <div class="card">
-      <h2>Sending policy</h2>
-      <div class="cfg-row"><label for="cl-policy">When to upload</label>
-        <select id="cl-policy">
-          <option value="0">Immediately after each event</option>
-          <option value="1">Batched, on the interval</option>
-        </select><span class="rng">independent of the supply</span></div>
-      <div class="cfg-row"><label for="cl-gap">Minimum gap</label>
-        <input type="number" id="cl-gap" min="0" max="3600">
-        <span class="rng">s &middot; 0 = every event. Coalesces a burst into one session.</span></div>
-      <div class="cfg-row"><label for="cl-int">Batch interval</label>
-        <input type="number" id="cl-int" min="1" max="1440"><span class="rng">min &middot; batched mode only</span></div>
-      <div class="cfg-row"><label for="cl-src">Power source</label>
-        <select id="cl-src">
-          <option value="0">Auto</option>
-          <option value="1">Battery</option>
-          <option value="2">Mains</option>
-        </select><span class="rng">recorded for the cloud; does not affect uploading</span></div>
-      <div class="notice" style="margin:11px 0 0">
-        <b>Immediate on battery is a supported combination</b> &mdash; these two
-        settings used to be one, so the only way to get prompt reporting was to
-        declare the node mains-powered. It costs one modem session per train; if
-        that proves too much on a busy line, raise the minimum gap rather than
-        going back to batching.
+      <h2>Cloud connection test</h2>
+      <div class="sub" style="margin:-4px 0 10px">
+        Runs the same path a real upload takes &mdash; modem, network, data
+        session, broker login and one small publish &mdash; and shows the step
+        where it stops. Takes 30&ndash;90 s; the node is busy meanwhile.
       </div>
+      <div class="kv"><span class="k">Broker</span><span class="v" id="mq-broker">&mdash;</span></div>
+      <div class="kv"><span class="k">Topic</span><span class="v" id="mq-topic" style="font-size:11px">&mdash;</span></div>
+      <div class="kv"><span class="k">1 &middot; Modem answers</span><span class="v" id="mq-at">&mdash;</span></div>
+      <div class="kv"><span class="k">2 &middot; Network registered</span><span class="v" id="mq-net">&mdash;</span></div>
+      <div class="kv"><span class="k">3 &middot; Data session</span><span class="v" id="mq-pdp">&mdash;</span></div>
+      <div class="kv"><span class="k">4 &middot; Broker login</span><span class="v" id="mq-connect">&mdash;</span></div>
+      <div class="kv"><span class="k">5 &middot; Test publish</span><span class="v" id="mq-publish">&mdash;</span></div>
+      <div class="row" style="margin-top:11px">
+        <button class="sm primary" id="btn-mq-test">Test cloud connection</button>
+      </div>
+      <div class="sub" style="margin-top:6px">
+        Login passes but publish fails? Check the SIM&rsquo;s APN whitelist first
+        &mdash; an IoT SIM that does not allow the server accepts the connection
+        and silently drops the data.
+      </div>
+
+      <h2 style="margin-top:16px">Reset</h2>
+      <div class="row">
+        <button class="sm danger" id="btn-queue-clear">Discard queued uploads</button>
+        <button class="sm danger" id="btn-prov-clear">Reset provisioning</button>
+      </div>
+      <div class="sub" style="margin-top:6px">
+        Both ask first. Queued events are the only copy of those passages;
+        resetting provisioning wipes the device key, project and device label.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>When the node uploads</h2>
+      <div class="kv"><span class="k">After a capture</span><span class="v">at once, in Monitoring</span></div>
+      <div class="kv"><span class="k">Every hour</span><span class="v">first minute of the IST hour</span></div>
+      <div class="kv"><span class="k">In Setup</span><span class="v">only on Upload now</span></div>
+      <div class="notice info" style="margin:11px 0 0">
+        Fixed in the firmware, not a setting. The hourly session carries the
+        fatigue total, the node&rsquo;s health and a clock refresh even when
+        nothing is queued, so a node that goes silent is a fault rather than a
+        quiet line.
+      </div>
+      <h2 style="margin-top:16px">Periodic idle sample</h2>
       <div class="cfg-row"><label for="cl-base">Periodic idle sample</label>
         <select id="cl-base"><option value="0">Off</option><option value="1">On</option></select>
         <span class="rng"></span></div>
@@ -776,12 +1098,19 @@ ol.steps b{color:var(--text-primary)}
       <div class="kv"><span class="k">Write path</span><span class="v" id="a-wr">&mdash;</span></div>
       <div class="kv"><span class="k">Last reading</span><span class="v" id="a-read">&mdash;</span></div>
       <div class="kv"><span class="k">Chip temperature</span><span class="v" id="a-temp">&mdash;</span></div>
+      <div class="kv"><span class="k">Analog rail (AVDD / excitation)</span><span class="v" id="a-rail">&mdash;</span></div>
       <div class="row" style="margin-top:11px">
         <button class="sm primary" id="btn-ad-probe">Probe</button>
         <button class="sm" id="btn-ad-short" title="Channel 9 shorts the modulator input internally">Self-test</button>
         <button class="sm" id="btn-ad-load">Read load</button>
         <button class="sm" id="btn-ad-temp">Chip temp</button>
         <button class="sm" id="btn-ad-cal">Internal cal</button>
+        <button class="sm" id="btn-ad-pwr-on" title="Power the AD7193 and bridge now">Rail on</button>
+        <button class="sm" id="btn-ad-pwr-off">Rail off</button>
+      </div>
+      <div class="sub" style="margin-top:6px">
+        Rail on/off is for bench checks. When the rail is on in normal
+        operation is set under <b>All settings &rarr; Analog rail</b>.
       </div>
       <div class="sub" id="a-hint" style="margin-top:8px"></div>
     </div>
@@ -880,16 +1209,22 @@ ol.steps b{color:var(--text-primary)}
 <!-- ══════════════════════════ ALL SETTINGS ══════════════════════════ -->
 <section role="tabpanel" id="t-cfg" hidden>
   <div class="notice info">
-    Every stored parameter, what it does, and why it is set the way it is.
-    Changes are queued locally and written together when you press
-    <b>Write &amp; commit</b> &mdash; one flash write for the batch, because
-    committing per field would burn the endurance budget.
+    Every setting on the node, grouped by what it affects &mdash; no commands to
+    remember. <b>Read from node</b> first, change what you need (edited fields
+    are outlined), then <b>Save</b> the row, the section, or everything. Open
+    <b>Help</b> on any row to see what it does and why you would change it.
   </div>
   <div class="card wide">
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" id="cfg-filter" placeholder="Find a setting &mdash; e.g. gauge, rail, threshold, upload"
+             style="max-width:360px" autocomplete="off">
+      <button class="sm" id="btn-cfg-rd-top">Read from node</button>
+      <span class="sub" id="cfg-filter-note"></span>
+    </div>
     <div id="cfg-table"></div>
     <div class="row" style="margin-top:12px">
       <button class="sm" id="btn-cfg-rd">Read from node</button>
-      <button class="sm primary" id="btn-cfg-wr">Write &amp; commit</button>
+      <button class="sm primary" id="btn-cfg-wr">Save all changes</button>
       <button class="sm" id="btn-cfg-exp">Export CSV</button>
       <button class="sm" id="btn-cfg-imp">Import CSV</button>
       <input type="file" id="cfg-file" accept=".csv,text/csv" hidden>
@@ -902,6 +1237,9 @@ ol.steps b{color:var(--text-primary)}
 <section role="tabpanel" id="t-term" hidden>
   <div class="card wide">
     <h2>SPP terminal</h2>
+    <label><input type="checkbox" id="log-technical"> Show raw commands and replies</label>
+    <label><input type="checkbox" id="capture-debug"> Detailed ADXL capture readings</label>
+    <style>#log:not(.technical) .l-rx, #log:not(.technical) .l-tx { display:none; }</style>
     <div id="log"></div>
     <div class="term-in">
       <input type="text" id="cmd" placeholder="Command, e.g. STATUS or HELP — Enter to send" autocomplete="off">
@@ -1009,7 +1347,7 @@ window.addEventListener('unhandledrejection', event => {
   if (event.reason instanceof LinkError) {
     event.preventDefault();
     $('conn-t').textContent = 'Operation stopped — see console';
-    log(event.reason.message + ' — operation stopped; reconnect and read settings before retrying.', 'l-err');
+    log(event.reason.message + ' — operation stopped. Check the settings before retrying.', 'l-err');
   }
 });
 const Link = (() => {
@@ -1026,9 +1364,12 @@ const Link = (() => {
   let device = null, char = null, rxBuf = '';
   let want = false;                 /* the operator's intent, not the state  */
   let reconnectTimer = null, backoff = 1000;
+  let retryTimer = null;
 
   const queue = [];
   let inflight = null;              /* {cmd, done, timer, resolve}           */
+  let writing = false;              /* GATT write promise still outstanding */
+  let nodeWorking = false;
 
   /*
    * How to tell that a command has finished.
@@ -1045,9 +1386,27 @@ const Link = (() => {
    * freeze the console exactly when it has the most to show.
    */
   function completionFor(cmd) {
+    if (cmd.startsWith('ADXL_DEBUG=')) return { ms: 3000,
+      match: (k, v) => (k === 'OK' && v === 'ADXL_DEBUG') || k === 'ERR' };
+    const readEnd = { STATUS: 'HEALTH', GET_LIVE: 'TEMP_C', GET_DIAG: 'WDT_RESETS',
+      GET_MODE: 'MODE', GET_TIME: 'TIME_SRC', GET_CLOUD_STATUS: 'PROV_DIRTY', GET_TB_TOKEN: 'TB_TOKEN_SET' };
+    if (readEnd[cmd]) return { key: readEnd[cmd], ms: 6000 };
+    if (cmd.startsWith('ADXL_TEST=')) return { ms: 8000,
+      match: (k, v) => k === 'ADXL_TEST_END' || (k === 'ERR' && v.startsWith('ADXL_TEST')) };
     if (cmd === 'GET_CONFIG')  return { key: 'CFG_END',     ms: 20000 };
     if (cmd === 'GET_FATIGUE') return { key: 'FATIGUE_END', ms: 20000 };
     if (cmd === 'GET_TUNE')    return { key: 'TUNE_END',    ms: 20000 };
+    if (cmd === 'GET_LIFECYCLE') return { key: 'LC_END', ms: 20000 };
+    const lcSet = /^SET_LC_([A-Z_]+)=/.exec(cmd);
+    if (lcSet) {
+      const name = 'LC_' + lcSet[1];
+      return { ms: 4000, match: (k, v) => (k === 'OK' && v === name)
+        || (k === 'ERR' && (v.startsWith(name + ',') || v.startsWith('LC,'))) };
+    }
+    if (cmd === 'LC_SAVE' || cmd === 'LC_FACTORY=ERASE') {
+      const name = cmd.split('=')[0];
+      return { ms: 8000, match: (k, v) => (k === 'OK' || k === 'ERR') && v.startsWith(name) };
+    }
 
     const set = /^SET_CFG_([A-Z0-9_]+)=/.exec(cmd);
     if (set) {
@@ -1065,8 +1424,8 @@ const Link = (() => {
                                 && v.startsWith('COMMIT_CFG') };
     }
     if (cmd.startsWith('SET_MODE=')) {
-      return { ms: 8000,
-               match: (k, v) => k === 'MODE' || (k === 'ERR' && !!v) };
+      return { ms: 30000,
+               match: (k, v) => (k === 'MODE' && v.split(',')[0] === cmd.split('=')[1]) || (k === 'ERR' && !!v) };
     }
     if (cmd === 'GET_CAL' || cmd === 'GET_WAKE') {
       /* Both end on a key the firmware always emits last for them. Waiting is
@@ -1089,9 +1448,30 @@ const Link = (() => {
 
   /* Called for every decoded line, before the UI sees it. */
   function observe(key, val) {
+    if (key === 'ACTIVITY' && val.startsWith('1,')) nodeWorking = true;
+    if (key === 'ACTIVITY' && val.startsWith('0,')) nodeWorking = false;
+    if (key === 'EVENT' && !val.startsWith('WARN,')) nodeWorking = false;
+    if (key === 'CLOUD') nodeWorking = true;
+    if (key === 'UPLOAD_DONE') nodeWorking = false;
+    if (key === 'ADXL_REARM' || (key === 'MODE' && val.startsWith('0,'))) nodeWorking = false;
     if (!inflight) return;
     if (key === 'ERR' && (val === 'BUSY' || val.startsWith('BUSY,'))) {
-      finish(inflight, new LinkError('Device busy; retry after the operation finishes'));
+      const item = inflight;
+      if (Date.now() >= item.deadline) {
+        finish(item, new LinkError('Device stayed busy; command was not applied: ' + item.cmd));
+        return;
+      }
+      clearTimeout(item.timer);
+      inflight = null;
+      if (queue.some(q => q.cmd === 'SET_MODE=0') && !/^(GET_|STATUS$)/.test(item.cmd)) {
+        item.reject(new LinkError('Cancelled pending command to enter Setup: ' + item.cmd));
+        pump();
+        return;
+      }
+      item.retryAt = Date.now() + 3000;
+      const stop = queue.findIndex(q => q.cmd === 'SET_MODE=0' || q.cmd === 'PROFILE=STOP');
+      queue.splice(stop < 0 ? 0 : stop + 1, 0, item);
+      pump();
       return;
     }
     if (!inflight.done) return;
@@ -1100,7 +1480,7 @@ const Link = (() => {
   }
 
   async function pump() {
-    if (inflight || queue.length === 0) return;
+    if (writing || inflight || queue.length === 0) return;
     if (!char) {
       /* Drain rather than hold: a queue that survives a disconnection would
        * replay stale commands at whatever node connects next. */
@@ -1108,12 +1488,18 @@ const Link = (() => {
       return;
     }
 
+    clearTimeout(retryTimer);
+    retryTimer = null;
+    const delay = (queue[0].retryAt || 0) - Date.now();
+    if (delay > 0) { retryTimer = setTimeout(pump, delay); return; }
+
     const item = queue.shift();
     inflight = item;
     log('→ ' + item.cmd, 'l-tx');
 
     const data = new TextEncoder().encode(item.cmd + '\n');
     const target = char;
+    writing = true;
     try {
       for (let i = 0; i < data.byteLength; i += CHUNK) {
         if (inflight !== item || char !== target) return;
@@ -1123,6 +1509,11 @@ const Link = (() => {
       log('Write failed: ' + e.message, 'l-err');
       finish(item, new LinkError('Bluetooth write failed: ' + e.message));
       return;
+    } finally {
+      writing = false;
+      /* A notification can finish the command before its write promise does.
+       * Only this point releases the GATT operation for the next command. */
+      if (inflight !== item) pump();
     }
 
     if (inflight !== item) return;
@@ -1146,14 +1537,27 @@ const Link = (() => {
 
     const rule = completionFor(cmd);
     return new Promise((resolve, reject) => {
-      queue.push({
+      if (cmd === 'SET_MODE=0') {
+        for (let i = queue.length - 1; i >= 0; i--) {
+          if (!/^(GET_|STATUS$)/.test(queue[i].cmd)) {
+            const stale = queue.splice(i, 1)[0];
+            stale.reject(new LinkError('Cancelled pending command to enter Setup: ' + stale.cmd));
+          }
+        }
+      }
+      const item = {
         cmd,
+        deadline: Date.now() + 600000,
         ms: rule ? rule.ms : PACE_MS,
         done: rule ? (rule.match ? rule.match : (k => k === rule.key)) : null,
         timer: null,
         resolve,
         reject,
-      });
+      };
+      /* A request to stop must not sit behind a settings write waiting for
+       * capture to finish. It still respects an active GATT write. */
+      if (cmd === 'SET_MODE=0' || cmd === 'PROFILE=STOP') queue.unshift(item);
+      else queue.push(item);
       pump();
     });
   }
@@ -1188,6 +1592,7 @@ const Link = (() => {
   function onDisconnected() {
     if (char) char.removeEventListener('characteristicvaluechanged', onNotify);
     char = null;
+    nodeWorking = false;
     rxBuf = '';
     const abandoned = inflight;
     inflight = null;
@@ -1197,6 +1602,8 @@ const Link = (() => {
     }
     while (queue.length) queue.shift().reject(new LinkError('Disconnected'));
     stopLive();
+    clearTimeout(retryTimer);
+    retryTimer = null;
     setConnUI(false);
 
     if (!want) { log('Disconnected'); return; }
@@ -1220,7 +1627,7 @@ const Link = (() => {
         await device.gatt.connect();
         await attach();
         log('Reconnected to ' + (device.name || 'device'));
-        await refreshAll();
+        await refreshAll().catch(e => log('Connected; settings refresh incomplete: ' + e.message, 'l-err'));
       } catch (e) {
         backoff = Math.min(backoff * 2, 8000);
         onDisconnected();
@@ -1241,7 +1648,7 @@ const Link = (() => {
         await device.gatt.connect();
         await attach();
         log('Connected to ' + (device.name || 'device'));
-        await refreshAll();
+        await refreshAll().catch(e => log('Connected; settings refresh incomplete: ' + e.message, 'l-err'));
       } catch (e) {
         want = false;
         log('Connect failed: ' + e.message, 'l-err');
@@ -1257,6 +1664,7 @@ const Link = (() => {
 
     get connected() { return char !== null; },
     get busy()      { return inflight !== null || queue.length > 0; },
+    get nodeBusy()  { return nodeWorking; },
   };
 })();
 
@@ -1280,7 +1688,7 @@ function setConnUI(on, name) {
  * 32 KB of RAM.
  * ═══════════════════════════════════════════════════════════════════════ */
 const CFG = [
- ['Load cell', null, null, null, null, null],
+ ['Load cell & ADC', null, null, null, null, null],
  ['CAPACITY_KN','Rated capacity','num',0.001,100000,'kN',
   'From the cell certificate. Scales every relative threshold and every fatigue bin width. Wrong here means every reading is wrong by that ratio, silently.'],
  ['MV_PER_V','Rated output','num',0.1,100,'mV/V',
@@ -1288,10 +1696,27 @@ const CFG = [
  ['PGA_GAIN','ADC gain','sel',0,0,'',
   'AD7193 programmable gain. 128 is the maximum and correct for a 2 mV/V cell: full load then uses 25.6% of the converter span, leaving 4x overload headroom. Reduce only for a higher-output cell.',
   ['1','8','16','32','64','128']],
- ['VREF_MV','Excitation voltage','num',0,5500,'mV',
-  '0 = the board default of 3000 mV. The bridge is excited from a regulated 3.000 V tied to AVDD/AGND, and REF+/REF− are those same nodes, so the excitation is the same on battery and on mains. Affects ONLY the microvolt figure shown for diagnostics — load in kN is ratiometric and cancels the excitation exactly, so changing this never invalidates a calibration.'],
  ['ADC_CHOP','Chop','bool',0,0,'',
   'Continuously removes ADC offset and drift and gains about half a bit, but quadruples conversion and settling time. Off by default; use the internal zero-scale calibration instead during captures.'],
+
+ ['Analog rail', null, null, null, null, null],
+ ['RAIL_MODE','When the analog rail (AVDD / excitation) is on','sel',0,0,'',
+  'When the 5 V rail feeding AVDD and the bridge excitation is on. Switching it on restarts the regulator, the reference and the bridge warm-up: excitation heats the gauges and the zero drifts for seconds afterwards, visible at gain 128. <b>Switched</b> is the original behaviour, and makes the live stream re-excite the bridge for every sample and read it ~50 ms later. <b>Held for the collection</b> (default) keeps the rail up for a whole live stream, so every sample after the first is on a warming bridge. A train capture is held for its whole passage in BOTH of those modes, so they will not differ on uploaded events. <b>Always on while monitoring</b> is what captures trains on a fully warm bridge — at the cost of the rail running continuously, roughly 9 mA for a 350 Ω bridge at 3 V. Measure the battery budget before using it in the field. Applies immediately; stored on the node.',
+  ['Switched per reading','Held for the collection','Always on while monitoring']],
+ ['RAIL_SETTLE_MS','Rail settle','num',50,2000,'ms',
+  'Wait after the rail comes up, before the first conversion. 50 ms is the original value and the minimum. More gives the regulator and reference margin, but on a triggered capture it is time the train is already on the deck: every millisecond here is leading edge not recorded. It cannot cover bridge warm-up — that takes seconds — so for that use Always on.'],
+
+ ['Output — mV/V or microstrain', null, null, null, null, null],
+ ['OUTPUT_QUANTITY','Send readings as','sel',0,0,'',
+  '<b>mV/V</b> (default) sends the bridge&rsquo;s ratiometric output with no calibration applied; the cloud converts it from parameters held against the device, so a wrong parameter is corrected in history. <b>Microstrain</b> converts on the node with the gauge factor and bridge below — ue = 4000 × (mV/V − zero) / (active arms × GF), the same formula the cloud uses — and sends STRAIN_PEAK and STRAIN_1S instead of LOAD_PEAK and LOAD_1S. RAW_CODE and GAIN are still sent, so the reading behind each figure is kept. On a load cell this is the strain in the cell&rsquo;s own element, not the structure&rsquo;s; for load, keep mV/V. The device in the cloud needs STRAIN_PEAK and STRAIN_1S channels to receive it. Applies immediately; stored on the node.',
+  ['mV/V (ratiometric)','Microstrain (ue)']],
+ ['GAUGE_FACTOR','Gauge factor','num',0.5,5,'',
+  'From the gauge datasheet; foil gauges are typically 2.0–2.2. Used only in Microstrain mode. A 5% error here is a 5% error in every strain figure.'],
+ ['BRIDGE','Bridge configuration','sel',0,0,'',
+  'How many arms of the bridge are active gauges. The same output from a full bridge is a quarter of the strain of a quarter bridge, so getting this wrong is a factor of 2 or 4. Used only in Microstrain mode.',
+  ['Quarter (1 active arm)','Half (2 active arms)','Full (4 active arms)']],
+ ['STRAIN_ZERO_MV_V','Strain zero offset','num',-10,10,'mV/V',
+  'The bridge output that means zero strain, subtracted before converting. Used only in Microstrain mode.'],
 
  ['Trigger', null, null, null, null, null],
  ['ACTIVITY_MG','Activity threshold','num',10,2000,'mg',
@@ -1302,8 +1727,10 @@ const CFG = [
   'How long motion must stay above the threshold before it counts. Filters single knocks. NOTE: this filter applies in measurement mode only — in the low-power wake-up mode the part triggers on a single sample, which is why the MCU re-checks after a wake.'],
  ['INACTIVITY_MS','Quiet time to end','num',200,10000,'ms',
   'How long the deck must stay quiet before the part decides the train has gone and drops back to its low-power state.'],
- ['ACCEL_AXIS_MASK','Detect on axes','num',0,6,'',
-  'Bitmask of axes to BLOCK from wake detection: 1=X, 2=Y, 4=Z; 0 uses all three. The ADXL367 ORs the enabled axes, so an axis that sees the site noise but none of the train raises the floor the others have to clear — blocking it is what lets the threshold come down. A train profile suggests the right value. All three blocked is refused: the node would never wake.'],
+ ['ACCEL_AXIS_MASK','Detect on axes','sel',0,0,'',
+  'Bitmask of axes to BLOCK from wake detection: 1=X, 2=Y, 4=Z; 0 uses all three. The ADXL367 ORs the enabled axes, so an axis that sees the site noise but none of the train raises the floor the others have to clear — blocking it is what lets the threshold come down. A train profile suggests the right value. All three blocked is refused: the node would never wake.',
+  /* Option index IS the firmware bitmask (1 = X, 2 = Y, 4 = Z blocked). */
+  ['All axes (X, Y, Z)','Ignore X','Ignore Y','Ignore X and Y','Ignore Z','Ignore X and Z','Ignore Y and Z']],
  ['HEALTH_CHECK_S','Self-check interval','num',0,3600,'s',
   'How often the node verifies its own wake path: that the ADXL367 still answers, that its arming registers still hold, and that the interrupt line is not stuck asserted. The last of those is the one that matters — in loop mode the part waits for inactivity after a train, and a deck that never goes quiet leaves it asserted forever, after which no train produces an edge and nothing says so. Repairs are skipped while a capture, upload, profile or calibration is in progress. 0 disables it.'],
  ['WAKE_CONFIRM_MS','Wake re-check','num',0,5000,'ms',
@@ -1320,70 +1747,89 @@ const CFG = [
   'Uploads a per-second trace with every event: the peak, mean and minimum load in each second of the passage, plus the peak acceleration. It is what turns "peaked at 118 kN over 47 s" into a picture of what actually crossed - one locomotive and sixty light wagons looks nothing like a uniformly loaded rake, and the event record alone cannot tell them apart. Costs about 380 bytes on a message that is already being sent. This switch controls the UPLOAD only; the trace is always built and GET_TRACE will still show it here, at no airtime cost.'],
  ['TRACE_PERIOD_MS','Trace bucket period','num',250,10000,'ms',
   'How much time each bucket of the trace covers. One second is about 11 m of train at the 40 km/h this line runs. A trace holds 64 buckets, and a passage that outruns them is NOT truncated - the buckets merge in pairs and the period doubles, so the whole passage is always covered and the console reports the period it ended up at. Note this cannot resolve individual axles at any setting: bogie axles are ~162 ms apart at line speed, and that needs the raw waveform, not this.'],
- ['ACCEL_CAPTURE_HZ','Accelerometer during capture','num',0,400,'Hz',
-  'Takes the ADXL367 out of activity detection for the length of a capture and streams it from its FIFO, which is what fills the acceleration column of the trace and the peak/RMS mg on the event record. 0 disables it, and is the only setting under which the part is never taken out of detection at all. The firmware re-arms unconditionally at the end of every capture, including the timeout and ADC-stall paths.'],
  ['LOAD_RATE_HZ','Capture sample rate','num',20,500,'Hz',
   'Rate during a capture. The AD7193 cannot go below about 75 Hz, so lower values are clamped and the real rate is reported. Choose for bandwidth, not noise — even 300 Hz is 8 ppm of full scale.'],
  ['ACCEL_RATE_HZ','Accelerometer rate','num',12,100,'Hz',
   'ADXL367 output data rate. The part maxes out at 400 Hz; low rates keep the FIFO drain cheap.'],
  ['LOAD_END_FRAC','Load end fraction','num',0.02,0.5,'',
-  'Legacy end-of-event level as a fraction of the event peak, used by the accelerometer capture path.'],
+  'A capture also ends once the load falls below this fraction of the passage&rsquo;s own peak (0.1 = 10%). Fractional, so it suits a light railcar and a loaded freight rake alike.'],
 
  ['Reporting', null, null, null, null, null],
- ['UPLOAD_POLICY','When to upload','sel',0,0,'',
-  'Immediately sends as soon as an event is queued; Batched holds events until the upload interval. Independent of how the node is powered — a battery node reporting immediately is a supported and common choice, it simply costs one modem session per train.',
-  ['Immediately','Batched']],
- ['HEARTBEAT_MIN','Longest permitted silence','num',0,10080,'min',
-  'How long a healthy node may go without contacting the cloud, even with nothing queued. A quiet line queues no events, so under the batched policy the node had no reason to open a session and simply stopped reporting - which from an office is indistinguishable from a flat battery, a seized accelerometer or a snapped antenna. That ambiguity is the failure this whole product is arranged around. The session it triggers is not empty: it carries the fatigue total, the node\u2019s own health counters and a clock refresh. One a day costs about 0.1% of the energy this site\u2019s traffic already spends. 0 disables it, for a node deliberately parked out of contact.'],
- ['UPLOAD_MIN_GAP_S','Minimum gap between sessions','num',0,3600,'s',
-  'Only in Immediate mode. A floor between modem sessions, so several trains arriving inside the gap ride out together on one session instead of one each. 0 is truly immediate. This is the setting that makes immediate reporting affordable on a battery.'],
- ['POWER_SOURCE','Power source','sel',0,0,'',
-  'Selects the sending regime: mains uploads each event as it happens, battery batches them. It no longer has anything to do with the excitation voltage, which is a regulated 3.000 V either way. Auto is treated as battery: guessing mains on a battery node would flatten the pack in days.',
-  ['Auto (= battery)','Battery','Mains']],
- ['UPLOAD_INT_MIN','Upload interval','num',1,1440,'min',
-  'Battery regime only. Measured from the last attempt, not the last success, so a failing link backs off instead of retrying continuously.'],
- ['UPLOAD_RETRIES','Upload retries','num',0,5,'',
-  'Attempts per interval before giving up until the next one.'],
  ['ENABLE_BASELINE','Periodic idle sample','bool',0,0,'',
   'Records the bridge doing nothing on an interval. Deterioration shows in the quiet behaviour long before it changes a passage peak.'],
  ['BASELINE_INT_MIN','Idle sample interval','num',1,1440,'min',
   'How often the idle sample is taken.'],
  ['BASELINE_DUR_S','Idle sample length','num',1,60,'s',
   'Length of each idle recording. 5 s at 50 Hz is 250 samples — ample for a mean, an RMS and a noise floor, and far cheaper than a full capture.'],
- ['CHAR_BATCH_S','Characterisation batch','num',10,60,'s',
-  'Length of a threshold-tuning batch in characterisation mode.'],
  ['ENABLE_BLE','BLE enabled','bool',0,0,
   '','Advertising and SPP. Disabling saves current on a commissioned node but removes the only local way back in.'],
  ['ENABLE_LTE','LTE enabled','bool',0,0,'',
   'Cellular uploads. Off means events accumulate in the queue.'],
- ['ENABLE_SD','SD raw archive','bool',0,0,'',
-  'Spool raw waveforms to the SD card per event.'],
+
+ ['Fatigue — S–N curve', null, null, null, null, null],
+ ['FAT_STRESS_PER_KN','Stress per kN','num',0,10000,'MPa/kN',
+  'The setting that turns fatigue on. Converts measured load into the stress range at the monitored detail; it can only come from the structural engineer for that specific member and connection. 0 = not supplied: damage still accumulates so the pipeline is exercised, but is reported UNCALIBRATED and has no physical meaning.'],
+ ['FAT_DETAIL_MPA','Detail category','num',10,200,'MPa',
+  'EN 1993-1-9 detail category: the stress range at 2 million cycles for the monitored connection.'],
+ ['FAT_SLOPE_M','S–N slope m','num',1,10,'',
+  '3.0 for steel below the knee of the curve.'],
+ ['FAT_CUTOFF_MPA','Cut-off','num',0,200,'MPa',
+  'Stress ranges below this do no damage. 29 MPa is the cut-off for category 80.'],
 ];
 
 const GAIN_STEPS = ['1','8','16','32','64','128'];
 const isHeading = r => r[2] === null;
 
+const cfgKnown = new Map();
+let cfgSaving = false;
+const cfgGroups = new Map();
+/* Lower-cased key, label, section and help text per setting, for the finder. */
+const cfgSearch = new Map();
+/* What belongs to a whole section rather than to one row. */
+const CFG_GROUP_NOTES = {
+  'ADXL — trigger and confirmation': '<p class="notice info">Required readings come from Sustained motion and the armed sample rate. At 25 Hz: 40 ms = 1, 80 ms = 2, 120 ms = 3. Wake re-check is the time allowed to collect them; 0 disables MCU confirmation.</p>',
+  'Analog rail': '<p class="notice info">Stored on the node the moment you save &mdash; these live in their own record, so they survive a reboot without anything else.</p>',
+  'Output — mV/V or microstrain': '<p class="notice info">Microstrain = 4000 &times; (mV/V &minus; zero offset) &divide; (active gauges &times; gauge factor). Gauge factor, bridge type and zero offset are used only when <b>Send readings as</b> is Microstrain. Stored the moment you save. The same controls, with a live conversion, are on <b>Commissioning &rarr; 4</b>.</p>',
+  'Fatigue — S–N curve': '<p class="notice">Also on the <b>Data</b> tab, next to the damage figures they produce.</p>',
+  'Reporting': '<p class="notice info">When uploads happen is fixed in the firmware: after each Monitoring capture and in the first minute of each IST hour.</p>',
+};
+let cfgGroup = '';
+for (const row of CFG) {
+  if (isHeading(row)) { cfgGroup = row[0] === 'Trigger' ? 'ADXL — trigger and confirmation' : row[0]; continue; }
+  let group = cfgGroup;
+  if (row[0].startsWith('ACCEL_')) group = 'ADXL — trigger and confirmation';
+  if (!cfgGroups.has(group)) cfgGroups.set(group, []);
+  cfgGroups.get(group).push(row);
+  const help = String(row[6] || '').replace(/<[^>]+>|&[a-z]+;/g, ' ');
+  cfgSearch.set(row[0], [row[0], row[0].replace(/_/g, ' '), row[1], group, help].join(' ').toLowerCase());
+}
 (function buildCfg() {
-  let h = '<table><thead><tr><th>Parameter</th><th>Value</th><th>Range</th>'
-        + '<th class="doc">What it does</th></tr></thead><tbody>';
-  for (const r of CFG) {
-    const [k,label,type,lo,hi,unit,doc,opts] = r;
-    if (isHeading(r)) { h += `<tr><td colspan="4"><h3>${k}</h3></td></tr>`; continue; }
-    let input;
-    if (type === 'sel')
-      input = `<select id="cfg-${k}">` + opts.map((o,i)=>`<option value="${i}">${o}</option>`).join('') + '</select>';
-    else if (type === 'bool')
-      input = `<select id="cfg-${k}"><option value="0">Off</option><option value="1">On</option></select>`;
-    else
-      input = `<input type="number" id="cfg-${k}" step="any" min="${lo}" max="${hi}">`;
-    const rng = type === 'num' ? `${lo}–${hi}${unit ? ' ' + unit : ''}` : '';
-    h += `<tr><td>${label}<br><span class="sub">${k}</span></td><td>${input}</td>`
-       + `<td>${rng}</td><td class="doc">${doc || ''}</td></tr>`;
-  }
-  $('cfg-table').innerHTML = h + '</tbody></table>';
+  let h = '';
+  const groups = [...cfgGroups].sort(([a],[b]) => (a.startsWith('ADXL') ? -1 : b.startsWith('ADXL') ? 1 : 0));
+  groups.forEach(([group, rows], index) => {
+    h += `<details class="card wide" ${index === 0 ? 'open' : ''}><summary><b>${group}</b> · ${rows.length} settings</summary>`;
+    h += CFG_GROUP_NOTES[group] || '';
+    h += '<table><thead><tr><th>Setting</th><th>Value</th><th>Action</th></tr></thead><tbody>';
+    for (const [k,label,type,lo,hi,unit,doc,opts] of rows) {
+      let input;
+      if (type === 'sel') input = `<select id="cfg-${k}">` + opts.map((o,i)=>`<option value="${i}">${o}</option>`).join('') + '</select>';
+      else if (type === 'bool') input = `<select id="cfg-${k}"><option value="0">Off</option><option value="1">On</option></select>`;
+      else input = `<input type="number" id="cfg-${k}" step="any" min="${lo}" max="${hi}">`;
+      const range = type === 'num' ? `${lo}–${hi} ${unit || ''}` : '';
+      h += `<tr data-cfg-row="${k}"><td>${label}<details><summary class="sub">Help · ${k}</summary>${doc || ''}</details></td><td>${input}<span class="sub">${range}</span></td><td><button class="sm" data-cfg-save="${k}">Save</button></td></tr>`;
+    }
+    h += `</tbody></table><button class="sm primary" data-cfg-group="${group}">Save changes in this section</button><span class="sub" data-cfg-note="${group}" role="status"></span></details>`;
+  });
+  $('cfg-table').innerHTML = h;
+  $('cfg-table').onclick = event => {
+    const field = event.target.closest('[data-cfg-save]');
+    const group = event.target.closest('[data-cfg-group]');
+    if (field) writeConfig([field.dataset.cfgSave], field.closest('details.card').querySelector('[data-cfg-note]'));
+    if (group) writeConfig(cfgGroups.get(group.dataset.cfgGroup).map(r => r[0]), group.parentElement.querySelector('[data-cfg-note]'));
+  };
 })();
 
-function setCfgField(name, val) {
+function setCfgField(name, val, fromNode = true) {
   const el = $('cfg-' + name);
   if (!el) return;
   /* PGA_GAIN renders as a picker but the firmware speaks the gain itself
@@ -1393,6 +1839,8 @@ function setCfgField(name, val) {
     const i = GAIN_STEPS.indexOf(String(parseInt(val,10)));
     el.value = String(i < 0 ? GAIN_STEPS.length-1 : i);
   } else el.value = val;
+  if (fromNode) { cfgKnown.set(name, cfgWire(name,el)); el.dataset.edited = ''; }
+  else el.dataset.edited = '1';
 }
 function cfgWire(k, el) { return k === 'PGA_GAIN' ? GAIN_STEPS[+el.value] : el.value; }
 
@@ -1410,41 +1858,42 @@ function cfgWire(k, el) { return k === 'PGA_GAIN' ? GAIN_STEPS[+el.value] : el.v
  * writes and this function still reported success, because the WRITE had
  * succeeded even though the parameter never arrived.
  */
-async function writeConfig() {
-  const note = $('cfg-note');
-  let sent = 0;
-  const outOfRange = [];
-  const refused = [];
-
-  /* Refusals come back asynchronously as ERR=<NAME>,<reason>; collect them by
-   * name so the message can say which parameter the node would not take. */
-  const onRefusal = (name, reason) => refused.push(`${name} (${reason})`);
-  window.__cfgRefusal = onRefusal;
-
-  for (const r of CFG) {
-    if (isHeading(r)) continue;
-    const [k, label, type, lo, hi] = r;
+async function writeConfig(keys = null, localNote = null) {
+  const note = localNote || $('cfg-note');
+  if (cfgSaving) { note.textContent = 'A save is already running. Please wait.'; return; }
+  const rows = CFG.filter(r => !isHeading(r) && (!keys || keys.includes(r[0])));
+  const changes = [];
+  for (const [k,label,type,lo,hi] of rows) {
     const el = $('cfg-' + k);
     if (!el || el.value === '') continue;
-    if (type === 'num') {
-      const v = parseFloat(el.value);
-      if (!Number.isFinite(v) || v < lo || v > hi) { outOfRange.push(label); continue; }
+    const value = cfgWire(k,el);
+    // Unread dropdown defaults are not edits; read from the node first.
+    if (!cfgKnown.has(k) && !el.dataset.edited) continue;
+    if (cfgKnown.has(k) && Number(cfgKnown.get(k)) === Number(value)) continue;
+    if (!Number.isFinite(Number(value)) || (type === 'num' && (Number(value) < lo || Number(value) > hi))) {
+      note.textContent = 'Not saved: check ' + label; return;
     }
-    note.textContent = `Writing ${label}…`;
-    await send(`SET_CFG_${k}=${cfgWire(k, el)}`);
-    sent++;
+    changes.push({k,label,value});
   }
-
-  await send('COMMIT_CFG');
-  window.__cfgRefusal = null;
-
-  const parts = [`Sent ${sent} parameter(s), committed.`];
-  if (outOfRange.length) parts.push('Skipped out of range: ' + outOfRange.join(', '));
-  /* A parameter the NODE refused is different from one this page skipped: the
-   * first means the firmware disagrees about the valid range, which is a
-   * version mismatch worth knowing about. */
-  if (refused.length) parts.push('Refused by the node: ' + refused.join(', '));
-  note.textContent = parts.join('  ');
+  if (!changes.length) { note.textContent = 'No changes to save. Read from node first if needed.'; return; }
+  // Lower the quiet threshold first when lowering activity below its old value.
+  if (changes.some(x => x.k === 'ACTIVITY_MG' && Number(x.value) <= Number(cfgKnown.get('INACTIVITY_MG'))))
+    changes.sort((a,b) => a.k === 'INACTIVITY_MG' ? -1 : b.k === 'INACTIVITY_MG' ? 1 : 0);
+  cfgSaving = true;
+  try {
+    for (const item of changes) {
+      note.textContent = 'Saving ' + item.label + '…';
+      await send('SET_CFG_' + item.k + '=' + item.value);
+    }
+    await send('COMMIT_CFG');
+    for (const item of changes) {
+      cfgKnown.set(item.k,item.value);
+      $('cfg-' + item.k).dataset.edited = '';
+    }
+    note.textContent = 'Saved ' + changes.length + ' change(s).';
+  } catch (err) {
+    note.textContent = 'Save stopped: ' + err.message + '. Earlier values may be in RAM; read from node before retrying.';
+  } finally { cfgSaving = false; }
 }
 
 /* CSV round-trip: what makes a 120-node rollout practical. Same key,value
@@ -1468,9 +1917,9 @@ function importCsv(text) {
     if (!line || line.startsWith('#')) continue;
     const [k, v] = line.split(',');
     if (!k || v === undefined) continue;
-    if ($('cfg-' + k.trim())) { setCfgField(k.trim(), v.trim()); n++; }
+    if ($('cfg-' + k.trim())) { setCfgField(k.trim(), v.trim(), false); n++; }
   }
-  $('cfg-note').textContent = `Loaded ${n} value(s). Review, then Write & commit.`;
+  $('cfg-note').textContent = `Loaded ${n} value(s). Review, then save a section or Save all changes.`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1509,15 +1958,122 @@ let msMode = "";
 let traceRows = [];
 let traceMeta = {};
 
+const adxlTest = { lines: [], raw: [], waitingForEdge: false, trigger: 0, enabled: null };
+function adxlSimple(message) {
+  adxlTest.lines.push(`[${new Date().toLocaleTimeString()}] ${message}`);
+  if (adxlTest.lines.length > 500) adxlTest.lines.shift();
+  $('ax-log').textContent = adxlTest.lines.join('\n');
+}
+function showAdxlLine(key, val) {
+  const fields = Object.fromEntries(val.split(',').filter(x => x.includes('=')).map(x => {
+    const at = x.indexOf('='); return [x.slice(0, at), x.slice(at + 1)];
+  }));
+  adxlTest.raw.push(`[${new Date().toISOString()}] ${key}=${val}`);
+  if (adxlTest.raw.length > 500) adxlTest.raw.shift();
+  $('ax-raw-log').textContent = adxlTest.raw.join('\n');
+  if (key === 'WAKE_DETAIL') {
+    const physical = val.startsWith('IRQ,');
+    adxlTest.trigger++;
+    const title = `#${adxlTest.trigger} ${physical ? 'Detected' : 'Software recovery'}`;
+    setTxt('ax-trigger-simple', title);
+    setTxt('ax-result-simple', 'Checking…');
+    setTxt('ax-ready-simple', 'Checking…');
+    adxlSimple(physical ? `Trigger #${adxlTest.trigger} detected` : `Wake #${adxlTest.trigger}: software recovery — physical interrupt not verified`);
+  }
+  if (key === 'ADXL_TEST') {
+    if (adxlTest.enabled !== fields.enabled) {
+      adxlTest.enabled = fields.enabled;
+      adxlSimple(fields.enabled === '1' ? 'Test running' : 'Test stopped');
+      if (fields.enabled === '0') {
+        setTxt('ax-ready-simple', 'No — stopped');
+        setTxt('ax-verdict', 'Test stopped');
+        adxlTest.waitingForEdge = false;
+      }
+    }
+    setTxt('ax-phase', fields.phase);
+    setTxt('ax-edges', `${fields.edges} / ${fields.held}`);
+  }
+  if (key === 'ADXL_HW') {
+    setTxt('ax-pins', `${fields.int1} / ${fields.int2}`);
+    setTxt('ax-armed', `${fields.awake} / ${fields.armed}`);
+    setTxt('ax-power', `${fields.adc === '1' ? 'on' : 'off'} / ${fields.modem === '1' ? 'on' : 'off'}`);
+  }
+  if (key === 'ADXL_CFG' || key === 'ADXL_CONFIRM') {
+    setTxt('ax-thresholds', `${fields.activity_mg} / ${fields.inactivity_mg} mg`);
+  }
+  if (key === 'ADXL_CONFIRM') {
+    const result = fields.checked !== '1' ? 'Not verified' : fields.pass === '1' ? 'Valid trigger' : 'False trigger';
+    setTxt('ax-result-simple', result);
+    adxlSimple(`${result}${fields.checked === '1' ? ' — ' + fields.peak_mg + ' mg' : ' — confirmation unavailable'}`);
+    setTxt('ax-confirm', `${fields.peak_mg} mg; ${fields.over}/${fields.need} qualifying, ${fields.samples} fresh samples`);
+    setTxt('ax-verdict', fields.checked !== '1' ? (fields.pass === '1' ? 'Confirmation disabled; hardware wake accepted.' : 'Not verified — no capture.') :
+      (fields.pass === '1' ? 'Valid trigger — rearming.' : 'False trigger — rearming.'));
+  }
+  if (key === 'ADXL_REARM') {
+    setTxt('ax-ready-simple', fields.ready === '1' ? 'Yes' : 'No — check detector');
+    adxlSimple(fields.ready === '1' ? 'Rearmed — ready for next trigger' : 'NOT rearmed/ready — check detector');
+    adxlTest.waitingForEdge = fields.ready === '1';
+    setTxt('ax-rearm', `${fields.reason}: ${fields.ready === '1' ? 'ready' : 'not quiet/ready'} after ${fields.ms} ms`);
+    setTxt('ax-pins', fields.int1 + ' / —');
+    setTxt('ax-armed', `${fields.awake} / ${fields.armed}`);
+    setTxt('ax-phase', fields.ready === '1' ? 'ARMED_WAIT' : 'CHECK DETECTOR');
+    setTxt('ax-verdict', fields.ready === '1' ? 'Rearmed and low. Apply the next physical tap.' :
+      'Not ready/quiet: inspect the pin, sensor response and thresholds.');
+    if (adxlTest.waitingForEdge) setTxt('ax-next', 'Waiting for the next physical IRQ');
+  }
+  if (key === 'WAKE_DETAIL' && val.startsWith('IRQ,') && adxlTest.waitingForEdge) {
+    adxlTest.waitingForEdge = false;
+    setTxt('ax-next', 'PASS — a new GPIO interrupt arrived after rearm');
+  }
+  if (key === 'ACTIVITY' && val.startsWith('1,')) setTxt('ax-phase', 'CAPTURE');
+  if (key === 'CLOUD') setTxt('ax-phase', 'UPLOAD');
+  if (key === 'ADXL_FAULT') adxlSimple('Detector fault — open Technical details');
+  if (key === 'ADXL_HOLDOFF') {
+    setTxt('ax-ready-simple', 'Waiting 5 seconds');
+    setTxt('ax-verdict', 'Modem off — allowing 5 seconds to settle before rearming');
+    adxlTest.waitingForEdge = false;
+    adxlSimple('Modem off — waiting 5 seconds before rearm');
+  }
+  if (key === 'ADXL_CONFIRM_NOTE') adxlSimple(val);
+  if (key === 'ADXL_WATCH') {
+    const messages = {
+      WAITING_FOR_MOTION: 'Waiting — sensor has not signalled new motion',
+      SENSOR_ACTIVE_PIN_LOW: 'Motion detected by sensor, but interrupt pin stays LOW — check INT1 wiring',
+      PIN_HIGH_NO_IRQ: 'Interrupt pin HIGH, but no MCU interrupt received — check GPIO interrupt setup',
+      SENSOR_READ_ERROR: 'Cannot read the ADXL sensor',
+      DETECTOR_NOT_ARMED: 'Detector is not armed — restart the test'
+    };
+    const message = messages[val] || val;
+    setTxt('ax-verdict', message);
+    adxlSimple(message);
+  }
+}
+
+function updateBusyNotice(key, val) {
+  const notice = $('busy-notice');
+  if (key === 'ERR' && (val === 'BUSY' || val.startsWith('BUSY,'))) {
+    const message = 'Command waiting — ' + (val.slice(5) || 'device is completing a sensor or modem operation.') + ' The console will retry automatically; Setup can stop the operation.';
+    if (notice.textContent !== message) log(message);
+    notice.textContent = message;
+    notice.hidden = false;
+  } else if (['UPLOAD_DONE', 'ADXL_REARM', 'PROFILE_DONE', 'OK', 'MODE'].includes(key)) {
+    notice.hidden = true;
+  }
+}
 function handleLine(line) {
   const eq = line.indexOf('=');
   if (eq < 0) return;
   const key = line.slice(0,eq), val = line.slice(eq+1);
+  updateBusyNotice(key, val);
+  if (key.startsWith('ADXL_') || ['WAKE_DETAIL','ACTIVITY','CLOUD','EVENT','UPLOAD_DONE'].includes(key)) {
+    showAdxlLine(key, val);
+  }
 
   const mf = key.match(/^FATIGUE\[(\d+)\]$/);
   if (mf) { const i=+mf[1]; if (i<32) fatBins[i] = num(val)||0; return; }
   const mt = key.match(/^TUNE\[(\d+)\]$/);
   if (mt) { const i=+mt[1]; if (i<SS_MAX_SEC) { PROF.base.secs[i]=num(val)||0; chartRender(); } return; }
+  if (key.startsWith('LC_') && lifecycleLine(key, val)) return;
   if (key.startsWith('CFG_')) { setCfgField(key.slice(4), val); mirrorToPanels(key.slice(4), val); return; }
 
   switch (key) {
@@ -1537,32 +2093,14 @@ function handleLine(line) {
     case 'TEMP_C':    setTxt('t-temp', fmt(num(val),2)); break;
     case 'BATT_MV':   setTxt('t-batt', val); break;
     case 'PENDING':   setTxt('t-pend', val); break;
-    case 'POWER_SOURCE':
-      /* Descriptive now — it no longer decides anything about uploading. */
-      $('cl-src').value = String(parseInt(val, 10) || 0);
-      break;
-    case 'UPLOAD_POLICY': {
-      /* On the Readiness card because "captured but never sent" is otherwise
-       * indistinguishable from a broken uplink. */
-      const n = parseInt(val, 10) || 0;
-      setTxt('r-regime', n === 0 ? 'immediate — send on each event'
-                                 : 'batched — send on the interval',
-             n === 0 ? 'var(--good)' : '');
-      $('cl-policy').value = String(n);
-      break;
-    }
-    case 'UPLOAD_MIN_GAP_S': $('cl-gap').value = val; break;
     case 'QUEUED': {
-      /* "<pending>,<NOW|GAP|BATCHED>,<seconds or minutes>" */
+      /* "<pending>,NOW,0" in Monitoring, "<pending>,MANUAL,<s to the hour>" in Setup */
       const p = val.split(',');
       if (p[1] === 'NOW') {
         log(`Event queued (${p[0]} pending) — uploading now`);
-      } else if (p[1] === 'GAP') {
-        log(`Event queued (${p[0]} pending) — holding ${p[2]} s for the minimum gap`,
-            'l-info');
       } else {
-        log(`Event queued (${p[0]} pending) — next upload in ${p[2]} min`
-            + ' — set "When to upload" to Immediately for prompt sending', 'l-info');
+        log(`Event queued (${p[0]} pending) — kept on the node; Setup does not`
+            + ' upload on its own. Use Upload now, or arm Monitoring.', 'l-info');
       }
       break;
     }
@@ -1570,7 +2108,12 @@ function handleLine(line) {
     case 'UPTIME_S':  setTxt('d-up', humanTime(+val)); break;
     case 'RSTCAUSE':  setTxt('d-rst', val); break;
     case 'WDT_RESETS':setTxt('d-wdt', val); break;
-    case 'CSQ':       setTxt('d-rssi', val); setTxt('m-csq', val); break;
+    /* -1 is "never measured", 99 is "the modem could not tell". Neither is a
+     * signal strength, and printing them raw made a healthy node look like it
+     * had no coverage - the dashboard read "-1" on a device whose uploads were
+     * working. The modem is off most of the time by design, so "not measured"
+     * is the normal state between sessions, not a fault. */
+    case 'CSQ':       setCsq('d-rssi', val); setCsq('m-csq', val); break;
     case 'LIFE_EVENTS': setTxt('d-ev', val); break;
     case 'SENSOR_FAULTS': setTxt('g-flt', val); break;
     case 'UTC_NOW': {
@@ -1615,6 +2158,16 @@ function handleLine(line) {
       break;
     }
     case 'SITE':      setTxt('d-site', val || '(unset)'); $('c-site').value = val; break;
+    /* The device label, which is also what the node advertises over BLE. Shown
+     * as the node's name because it is the one string that matches the
+     * dashboard, the MQTT topic and what a phone sees while scanning. */
+    case 'BLE_NAME':
+      setTxt('d-name', val || '(unset)');
+      if (!$('d-rename').value) $('d-rename').value = val;
+      break;
+    /* The only identity an uncommissioned node has: two unnamed units on a
+     * bench are told apart by this and nothing else. */
+    case 'BLE_MAC':   setTxt('d-mac', val || '—'); break;
 
     /* ── Calibration ─────────────────────────────────────────────────── */
     case 'CAL_VALID': {
@@ -1632,13 +2185,12 @@ function handleLine(line) {
     case 'CAPACITY_KN': $('c-cap').value = val; recalcCell(); break;
     case 'MV_PER_V':    $('c-mvv').value = val; recalcCell(); break;
     case 'PGA_GAIN':    $('c-gain').value = String(parseInt(val,10)); recalcCell(); break;
-    case 'VREF_UV': {
-      const p = val.split(',');
-      vrefUv = +p[0];
-      $('c-vref').value = (p[1]==='AUTO') ? '0' : String(Math.round(vrefUv/1000));
+    case 'EXCITATION_MV':
+      excitationMv = +val || 3000;
+      setTxt('c-exc', excitationMv + ' mV, regulated');
+      setTxt('lv-uv-sub', `across the bridge at ${excitationMv} mV`);
       recalcCell();   /* the full-scale figure depends on it */
       break;
-    }
     case 'FS_UV': setTxt('c-fs', fmt(num(val),1) + ' µV'); break;
     /* STREAM carries the on/off state and nothing else; the samples arrive
      * tagged SAMPLE. They shared a key once, and every sample line reset the
@@ -1646,9 +2198,13 @@ function handleLine(line) {
     case 'STREAM':
       streamOn = (val === '1');
       $('btn-stream').textContent = 'Live stream: ' + (streamOn ? 'on' : 'off');
+      paintLiveState();
       break;
-    case 'SAMPLE':     setTxt('k-live', val); setTxt('a-read', val); break;
-    case 'SAMPLE_ERR': $('cal-note').textContent = 'Stream: ' + val; break;
+    case 'SAMPLE':     onSample(parseSample(val)); break;
+    case 'SAMPLE_ERR':
+      $('cal-note').textContent = 'Stream: ' + val;
+      setTxt('lv-age', 'Reading failed: ' + val, 'var(--warn)');
+      break;
 
     /* ── Detector ────────────────────────────────────────────────────── */
     case 'WAKE_SOURCE':
@@ -1667,7 +2223,7 @@ function handleLine(line) {
        * until the next self-check, up to a whole interval later. */
       const p = val.split(',');
       log(`Re-armed after ${p[0]} — wake line was still asserted (#${p[1]})`,
-          p[2] === 'OK' ? 'l-info' : 'l-err');
+          p[2] === 'OK' ? 'l-rx' : 'l-err');
       setTxt('w-retrig', p[1]);
       break;
     }
@@ -1887,6 +2443,22 @@ function handleLine(line) {
     case 'TB_TOKEN': $('p-token').value = val; break;
     case 'TB_HOST':  $('p-host').value  = val; break;
     case 'TB_PORT':  $('p-port').value  = val; break;
+    case 'PROJECT':  $('p-project').value = val; break;
+    case 'DEVICE':   $('p-device').value  = val; break;
+    case 'TOPIC':
+      /* Shown verbatim, including the node's own "<unset: ...>" text. Writing
+         our own placeholder here would hide which of the two fields is missing. */
+      setTxt('p-topic', val, val.startsWith('<') ? 'var(--warn)' : '');
+      break;
+    case 'ADDRESSABLE':
+      setTxt('p-addr', val === '1' ? 'yes' : 'no',
+             val === '1' ? 'var(--good)' : 'var(--warn)');
+      break;
+    case 'SAVED':
+      /* The node persisted a provisioning field. Distinct from OK, which for
+         these means "accepted but not yet stored". */
+      log('stored: ' + val);
+      break;
     case 'APN':      $('p-apn').value   = val; break;
     case 'TB_TOKEN_SET':
       setTxt('p-token-state', val==='1'?'provisioned':'auto (MAC)',
@@ -1898,6 +2470,12 @@ function handleLine(line) {
       ready.cloud = val === '1'; paintReadiness();
       break;
     case 'UPLOAD_DONE': { const p=val.split(',');
+      /* The session just measured this with the modem powered and registered,
+       * which is the only moment a CSQ means anything. STATUS reports whatever
+       * was last recorded, so between sessions this is the freshest figure
+       * there is - and on a node that has just uploaded, it is the answer to
+       * "is the signal good enough here". */
+      setCsq('d-rssi', p[2]);
       /* p[3] is the fatigue/lifetime snapshot, sent every session regardless of
        * whether any event was queued. Its absence is what "no fatigue in the
        * cloud" looks like from here. */
@@ -1913,13 +2491,16 @@ function handleLine(line) {
       if (p[0] === 'OK') {
         log(`${what}: ${p[1]} samples @ ${p[2]} Hz, ${p[3]} cycles, `
             + `mean ${p[4]} kN, rms ${p[5]} kN`);
-        readEvent();
+        scheduleEventRead();
       } else {
         log(`${what} failed: ` + val, 'l-err');
       }
       break;
     }
-    case 'EVENT': log('Capture: ' + val); readEvent(); break;
+    case 'EVENT': log('Capture: ' + val); scheduleEventRead(); break;
+    case 'WAKE_DETAIL': log('Trigger detected'); break;
+    case 'ADXL_REARM': log(val.includes('ready=1') ? 'Rearmed — ready for next trigger' : 'Rearm failed — check sensor', val.includes('ready=1') ? 'l-info' : 'l-err'); break;
+    case 'CONTROL': if (val === 'SETUP_PENDING') log('Stopping current operation — switching to Setup'); break;
     case 'CLOUD': log('cloud: ' + val); break;
 
     /* ── Diagnostics ─────────────────────────────────────────────────── */
@@ -2031,8 +2612,8 @@ function handleLine(line) {
         log(`Passage shape: ${traceMeta.n} buckets of ${secs}s` +
             (traceMeta.coarse
               ? ' (coarsened - the passage outran the configured period)' : ''));
-        log('i,peak_kn,mean_kn,min_kn,vib_mg_dev');
-        for (const r of traceRows) log('  ' + r);
+        log('i,peak_kn,mean_kn,min_kn,vib_mg_dev', 'l-rx');
+        for (const r of traceRows) log('  ' + r, 'l-rx');
       }
       break;
     }
@@ -2045,7 +2626,7 @@ function handleLine(line) {
       const ok = val.startsWith('OK');
       setTxt('a-det', ok?'yes':'NO — '+val, ok?'var(--good)':'var(--crit)'); break;
     }
-    case 'AD_HINT': setTxt('a-hint', val); break;
+    case 'AD_HINT': setTxt('a-hint', hintText(val)); break;
 
     /* ── Accelerometer ───────────────────────────────────────────────── */
     case 'ACC_PART': setTxt('x-part', val); break;
@@ -2130,11 +2711,12 @@ function handleLine(line) {
              worst >= 2 ? 'var(--crit)' : worst >= 0.5 ? 'var(--warn)' : 'var(--good)');
       break;
     }
-    case 'AD_READ': setTxt('a-read', val); break;
+    case 'AD_READ': setTxt('a-read', describeSample(parseSample(val))); break;
     case 'AD_TEMP_C': { const p=val.split(',');
       setTxt('a-temp', p[0]+' °C ('+(p[1]||'')+')', p[1]==='plausible'?'var(--good)':'var(--warn)'); break; }
     case 'ERR': {
-      log('error: ' + val, 'l-err');
+      if (!val.startsWith('BUSY')) log('Command failed: ' + val, 'l-err');
+      if (val.startsWith('LC')) lifecycle.errors.push(val);
       /* A SET_CFG_ refusal during a bulk write is collected so writeConfig()
        * can name the parameter rather than reporting a blanket success. */
       if (window.__cfgRefusal) {
@@ -2143,7 +2725,46 @@ function handleLine(line) {
       }
       break;
     }
-    case 'HINT': log(val); break;
+    /* The node answers HELP=console,<fw>. It no longer carries the listing:
+     * 1.4 KB of prose in flash, duplicating command names dispatch already
+     * holds for strcmp, read perhaps twice in a node's life. What it still
+     * owns is ERR=UNKNOWN_CMD, so a typo is still judged by the device.
+     *
+     * A firmware built with -DSS_SPP_HELP_TEXT=1 sends HELP= lines instead,
+     * which fall through to the log untouched. */
+    case 'HELP':
+      if (val.startsWith('console')) showHelp(val.split(',')[1] || '');
+      else log('HELP=' + val);
+      break;
+    /* Rail and output settings live in their own records on the node, so
+     * GET_WAKE reports them under bare names; newer firmware repeats them as
+     * CFG_ lines in GET_CONFIG. Either way they fill the same fields. */
+    case 'RAIL_MODE': case 'RAIL_SETTLE_MS':
+    case 'OUTPUT_QUANTITY': case 'GAUGE_FACTOR': case 'BRIDGE': case 'STRAIN_ZERO_MV_V':
+      setCfgField(key, val); mirrorToPanels(key, val); break;
+    case 'RAIL_ON': case 'AD_POWER': case 'AD_RAIL':
+      setTxt('a-rail', val.startsWith('1') ? 'on' : 'off', val.startsWith('1') ? 'var(--good)' : 'inherit'); break;
+    case 'TB_TLS':
+      $('p-tls').value = val === '0' ? '0' : '1'; break;
+    /* MQTT_TEST reports each stage as it passes; a stage never reached keeps
+     * its ellipsis, which is itself the answer to "where did it stop". */
+    case 'MQ_TOPIC':  setTxt('mq-topic', val, ''); break;
+    case 'MQ_BROKER': setTxt('mq-broker', val, ''); break;
+    case 'MQ_AT': case 'MQ_NET': case 'MQ_PDP': case 'MQ_CONNECT': case 'MQ_PUBLISH':
+      setTxt('mq-' + key.slice(3).toLowerCase(), val === 'OK' ? 'OK' : 'failed · ' + val,
+             val === 'OK' ? 'var(--good)' : 'var(--crit)'); break;
+    case 'MQ_PUB_ERR':
+      setTxt('mq-publish', 'failed · module error ' + val, 'var(--crit)'); break;
+    case 'CLEARED':
+      log(val.startsWith('QUEUE')
+          ? `Upload queue cleared — ${val.split(',')[1] || 0} event(s) discarded.`
+          : 'Provisioning reset to defaults. Enter the device key, project and device label again.',
+          'l-info');
+      break;
+    case 'HINT':     log(hintText(val)); break;
+    case 'MQ_HINT':  log(hintText(val)); break;
+    case 'MT_HINT':  log(hintText(val)); break;
+    case 'ACC_HINT': log(hintText(val)); break;
     default: break;
   }
 
@@ -2274,7 +2895,7 @@ function paintMode(sel) {
 }
 $('m-mode').addEventListener('change', () => paintMode(+$('m-mode').value));
 
-let vrefUv = 3000000;   /* the board's regulated reference, until the node says otherwise */
+let excitationMv = 3000;   /* the board's regulated excitation; GET_CAL confirms it */
 let gPins = {};
 function paintPins() {
   setTxt('g-uart', `TX ${gPins.tx||'?'}  RX ${gPins.rx||'?'}`);
@@ -2282,15 +2903,20 @@ function paintPins() {
 }
 function mirrorToPanels(k, v) {
   const map = {CAPACITY_KN:'c-cap', MV_PER_V:'c-mvv', 
-    ACTIVITY_MG:'w-act', INACTIVITY_MG:'w-inact', 
-    UPLOAD_INT_MIN:'cl-int',
+    ACTIVITY_MG:'w-act', INACTIVITY_MG:'w-inact',
     BASELINE_INT_MIN:'cl-bint', BASELINE_DUR_S:'cl-bdur'};
   if (map[k] && $(map[k])) $(map[k]).value = v;
-  if (k === 'POWER_SOURCE')     $('cl-src').value    = v;
-  if (k === 'UPLOAD_POLICY')    $('cl-policy').value = v;
-  if (k === 'UPLOAD_MIN_GAP_S') $('cl-gap').value    = v;
   if (k === 'ENABLE_BASELINE') $('cl-base').value = v;
   if (k === 'PGA_GAIN')        $('c-gain').value  = String(parseInt(v,10));
+  if (k === 'OUTPUT_QUANTITY') {
+    const ue = parseInt(v,10) === 1;
+    $('o-qty').value = ue ? '1' : '0';
+    setTxt('o-qty-now', 'node: ' + (ue ? 'microstrain' : 'mV/V'), '');
+  }
+  if (k === 'GAUGE_FACTOR')     $('o-gf').value     = v;
+  if (k === 'BRIDGE')           $('o-bridge').value = String(parseInt(v,10) || 0);
+  if (k === 'STRAIN_ZERO_MV_V') $('o-zero').value   = v;
+  if (['OUTPUT_QUANTITY','GAUGE_FACTOR','BRIDGE','STRAIN_ZERO_MV_V'].includes(k)) paintOutput();
   recalcCell();
 }
 
@@ -2300,10 +2926,9 @@ function mirrorToPanels(k, v) {
 function recalcCell() {
   const mvv = parseFloat($('c-mvv').value), g = parseInt($('c-gain').value,10);
   if (!Number.isFinite(mvv) || !Number.isFinite(g)) return;
-  const fsUv = mvv * vrefUv / 1000;
-  /* Three decimals to match what the node now reports: at 3.000 V a 1 mV/V cell
-   * is only 3000 µV full scale, and the readings inside it are small. */
-  setTxt('c-fs', fsUv.toFixed(3) + ' µV');
+  /* mV/V times millivolts of excitation is microvolts. */
+  const fsUv = mvv * excitationMv;
+  setTxt('c-fs', fsUv.toFixed(1) + ' µV');
   const frac = (mvv/1000) * g * 100;
   setTxt('c-span-used', frac.toFixed(1) + ' %',
          frac > 100 ? 'var(--crit)' : frac < 5 ? 'var(--warn)' : 'var(--good)');
@@ -2314,6 +2939,131 @@ function recalcCell() {
 
 const decodeFlags = b => !b ? 'none'
   : EVENT_FLAGS.filter((_,i)=>b&(1<<i)).join(', ') || ('0x'+b.toString(16));
+
+/* ── Hint codes ───────────────────────────────────────────────────────────
+ *
+ * The node ships numbers; the sentences live here. Six lines of wiring advice
+ * is 400 bytes of flash on a part with 512 KB, carried by every unit ever
+ * built to be read during one bring-up and never again. On a laptop the same
+ * words cost nothing and can be corrected without reflashing a device that is
+ * bolted to a structure.
+ *
+ * Keys must match STRUCT_SENSE2_KINETIX/ss_core/ss_verbosity.h and are
+ * APPEND-ONLY. A node in the field and this page are updated on completely
+ * different schedules, so reusing a number turns an old node's correct report
+ * into a confident lie. Add, never redefine.
+ *
+ * A firmware built with -DSS_SPP_HINT_TEXT=1 sends the sentence instead, and
+ * hintText passes it straight through.
+ */
+const HINTS = {
+  1:  'All reads 0xFF — CS (PC01) is never asserted, or the part is unpowered.',
+  2:  'Bus responds but the ID is wrong — wrong part fitted, or SPI mode/bit order.',
+  3:  'Reads fine, but a MODE write was ignored — the part is not accepting writes.',
+  4:  'MODE writes but OFFSET does not — idle mode was not entered.',
+  5:  'STATUS.NOREF is set — REFIN1+/REFIN1− missing. Check the EN-5V rail and the 3.0 V excitation.',
+  6:  'All reads 0x00 — MISO (PC02) open, or AVDD/DVDD dead.',
+  7:  'ADC detected, read and write verified. Try AD_READ=9.',
+  20: 'No reply at 0x1D or 0x53 — check SDA (PA04), SCL (PA05), 3V3 and GND.',
+  40: 'Transport is good: the modem, TLS, credentials and topic all work. '
+      + 'A failing upload is above this layer.',
+  41: 'Send MODEM_DEBUG=1 and repeat to see the AT exchange.',
+  42: 'Not addressable — set SET_PROJECT and SET_DEVICE first.',
+  60: 'Measure 4 V at the modem VBAT; PA00 low; PA08 low.',
+  80: 'Automatic upload is suppressed in Setup mode. Use TRIGGER_UPLOAD.',
+  81: 'A capture or upload is in progress. Retry after the node re-arms.',
+  82: 'Modem still silent after recovery. It waits for the next capture or the '
+      + 'hourly wake.',
+};
+
+/* ── Signal strength ──────────────────────────────────────────────────────
+ *
+ * AT+CSQ answers 0-31, or 99 for "not known or not detectable". The node
+ * reports -1 when it has never read one at all, which is the usual state: the
+ * modem is powered down between sessions to save the battery, so there is
+ * nothing to measure for most of a node's life.
+ *
+ * Printing those two raw is what put "-1" on the dashboard of a node whose
+ * uploads were succeeding. They are not signal strengths and must not read
+ * like one.
+ *
+ * The dBm mapping is the one from the AT spec: 0 is -113 dBm and each step is
+ * 2 dB, so 31 is -51 dBm or better.
+ */
+function setCsq(id, v) {
+  const n = Number(String(v).split(',')[0]);
+  if (!Number.isFinite(n) || n < 0)  return setTxt(id, 'not measured yet');
+  if (n === 99)                      return setTxt(id, 'unknown to the modem', 'var(--warn)');
+  if (n > 31)                        return setTxt(id, String(v));
+  const dbm = -113 + 2 * n;
+  const tone = n >= 15 ? 'var(--good)' : n >= 8 ? 'var(--warn)' : 'var(--crit)';
+  const word = n >= 15 ? 'good' : n >= 8 ? 'workable' : 'marginal';
+  setTxt(id, `${n}/31 — ${dbm} dBm, ${word}`, tone);
+}
+
+/* A bare number is a code; anything else is a firmware built with the text
+ * compiled in, and is already the sentence. */
+function hintText(v) {
+  const s = String(v).trim();
+  if (!/^\d+$/.test(s)) return s;
+  return HINTS[+s] || ('hint ' + s + ' (unknown to this console — update it)');
+}
+
+/* ── The command listing, which used to live in the node ──────────────────
+ *
+ * Grouped rather than in the flat order the firmware emitted, because the
+ * reason to send HELP is almost always "what is the command for X" and not
+ * "list everything".
+ */
+const HELP_GROUPS = [
+  ['Read state', [
+    'STATUS', 'GET_LIVE', 'GET_DIAG', 'GET_PINS', 'GET_MODE', 'GET_LAST_EVENT',
+    'GET_CONFIG', 'GET_FATIGUE', 'GET_TUNE', 'GET_WAKE', 'GET_CLOUD_STATUS',
+    'GET_TIME', 'GET_MEM', 'GET_TRACE', 'GET_FW_VERSION',
+  ]],
+  ['Cloud provisioning', [
+    'SET_TB_HOST=<host>', 'SET_TB_PORT=<n>', 'SET_TB_TLS=<0|1>',
+    'SET_TB_TOKEN=<kxd_...>', 'SET_PROJECT=prj_...', 'SET_DEVICE=<label>',
+    'SET_APN=<apn>',
+  ]],
+  ['Modem and cloud', [
+    'MODEM_ON', 'MODEM_OFF', 'MODEM_TEST', 'MODEM_INFO', 'MODEM_STATUS',
+    'MODEM_DEBUG=<0|1>', 'MQTT_TEST', 'AT=<raw>', 'TRIGGER_UPLOAD',
+  ]],
+  ['Capture and triggering', [
+    'CAPTURE_NOW', 'SIM_TRAIN', 'SET_MODE=0 (setup) | 1 (monitoring)',
+    'PROFILE=BASELINE|TRAIN|STOP',
+  ]],
+  ['Sensors', [
+    'AD_PROBE', 'AD_READ[=<ch>[,<gain>]]', 'AD_TEMP', 'AD_CAL',
+    'AD_POWER=<0|1>', 'ACC_PROBE', 'ACC_READ',
+  ]],
+  ['Configuration', [
+    'SET_CFG_<NAME>=<v>', 'COMMIT_CFG', 'SET_TIME=<unix>',
+    'SET_CFG_TRACE_ENABLE=<0|1>', 'SET_CFG_TRACE_PERIOD_MS=<250..10000>',
+    'STREAM=<0|1>  (live readings: raw, mV/V, µV, kN, gain)',
+  ]],
+  ['Destructive — each needs the word ERASE', [
+    'FATIGUE_RESET=ERASE  (lifetime damage and cycles)',
+    'GET_LIFECYCLE  (event number, lifetime counters, fatigue bins)',
+    'SET_LC_<NAME>=<n>, SET_LC_DAMAGE=<x>, SET_LC_BIN=<bin>,<half cycles>, then LC_SAVE',
+    'SET_LC_SEQ_NEXT=<n>  (saved immediately; must be above queued events)',
+    'LC_FACTORY=ERASE  (all lifetime values to factory default)',
+    'QUEUE_CLEAR=ERASE  (pending uploads)',
+    'PROV_CLEAR=ERASE  (token, project, device)',
+    'REBOOT',
+  ]],
+];
+
+function showHelp(fw) {
+  log('Commands' + (fw ? ' — firmware ' + fw : ''));
+  for (const [title, cmds] of HELP_GROUPS) {
+    log('  ' + title);
+    for (const c of cmds) log('    ' + c);
+  }
+  log('  AD_READ channels: 0=AIN1/2  3=AIN7/8  8=temp  9=internal short');
+  log('  GET_CONFIG lists every SET_CFG_ name this build accepts.');
+}
 function humanTime(s) {
   if (!Number.isFinite(s)) return '—';
   const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
@@ -2383,6 +3133,17 @@ $('hist').addEventListener('mouseleave', ()=>{ $('tooltip').style.opacity=0; });
  * Commands
  * ═══════════════════════════════════════════════════════════════════════ */
 const readEvent = () => send('GET_LAST_EVENT');
+let eventReadTimer = null;
+function scheduleEventRead() {
+  clearTimeout(eventReadTimer);
+  eventReadTimer = setTimeout(async () => {
+    eventReadTimer = null;
+    if (!Link.connected) return;
+    if (Link.nodeBusy || Link.busy) { scheduleEventRead(); return; }
+    try { await readEvent(); }
+    catch (e) { log('Event refresh deferred: ' + e.message, 'l-err'); }
+  }, 1000);
+}
 
 /*
  * Ordered, and now genuinely sequential.
@@ -2399,21 +3160,41 @@ const readEvent = () => send('GET_LAST_EVENT');
  * commands for the same reason.
  */
 async function refreshAll() {
-  await send('STATUS');
-  await send('GET_DIAG');
-  await send('GET_MODE');
-  await send('GET_TIME');
-  await send('GET_CAL');
-  await send('GET_WAKE');
-  await send('GET_CLOUD_STATUS');
-  await send('GET_CONFIG');
+  /*
+   * One missed reply no longer abandons the rest. It used to: a single lost
+   * last line of GET_WAKE timed out, the loop threw, and GET_CLOUD_STATUS and
+   * GET_CONFIG were never sent - so the node's name, BLE address, provisioning
+   * and every setting stayed blank because of one line about the ADC.
+   *
+   * Identity (GET_CLOUD_STATUS) is asked early, right after the mode, because
+   * it is what the operator checks first. Order is otherwise unchanged, and the
+   * GET_CONFIG stream still goes last so nothing can interrupt it.
+   */
+  const commands = ['STATUS', 'GET_DIAG', 'GET_MODE', 'GET_CLOUD_STATUS',
+                    'GET_TIME', 'GET_CAL', 'GET_WAKE', 'GET_CONFIG'];
+  const missed = [];
+  for (const cmd of commands) {
+    try {
+      await send(cmd);
+    } catch (err) {
+      if (/not connected/i.test(err.message)) throw err;   // nothing left to ask
+      missed.push(cmd);
+    }
+  }
+  if (missed.length) {
+    throw new Error('no complete reply to ' + missed.join(', ')
+      + ' — everything else loaded; press Refresh all to retry');
+  }
 }
 function stopLive(){ if(liveTimer){clearInterval(liveTimer);liveTimer=null;} $('btn-live').textContent='Live poll: off'; }
 function toggleLive(){
   if (liveTimer) { stopLive(); return; }
   /* 1 Hz. Not faster: on a battery unit each poll keeps the CPU out of EM2,
    * and during a precision conversion the firmware may refuse entirely. */
-  liveTimer = setInterval(()=>{ demoMode ? demoTick() : send('GET_LIVE'); }, 1000);
+  liveTimer = setInterval(()=>{
+    if (demoMode) demoTick();
+    else if (!Link.nodeBusy && !Link.busy) send('GET_LIVE');
+  }, 1000);
   $('btn-live').textContent = 'Live poll: on';
 }
 
@@ -2426,6 +3207,31 @@ document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => {
 });
 
 $('btn-conn').onclick = () => Link.connect();
+$('log-technical').onchange = e => $('log').classList.toggle('technical', e.target.checked);
+$('capture-debug').onchange = async e => {
+  const enabled = e.target.checked;
+  try {
+    await send('ADXL_DEBUG=' + (enabled ? '1' : '0'));
+    if (enabled) {
+      $('log-technical').checked = true;
+      $('log').classList.add('technical');
+    }
+  }
+  catch (err) { e.target.checked = !enabled; throw err; }
+};
+$('btn-adxl-start').onclick = async () => {
+  adxlTest.waitingForEdge = false;
+  await send('SET_MODE=0');
+  await send('ADXL_TEST=START');
+};
+$('btn-adxl-status').onclick = () => send('ADXL_TEST=STATUS');
+$('btn-adxl-clear').onclick = () => send('ADXL_TEST=CLEAR');
+$('btn-adxl-stop').onclick = () => send('ADXL_TEST=STOP');
+$('btn-adxl-export').onclick = () => {
+  const url = URL.createObjectURL(new Blob([adxlTest.lines.join('\n')], {type:'text/plain'}));
+  const a = document.createElement('a'); a.href = url; a.download = 'adxl-validation.txt';
+  a.click(); URL.revokeObjectURL(url);
+};
 /* Explicit disconnect clears the reconnect intent first, so the link layer does
  * not immediately put back what the operator just took down. */
 $('btn-disc').onclick = () => Link.disconnect();
@@ -2467,6 +3273,227 @@ $('btn-fat-reset').onclick = async () => {
   await send('FATIGUE_RESET=ERASE');
   await send('GET_FATIGUE');
 };
+/* ═══════════════════════════════════════════════════════════════════════
+ * Lifecycle: read, overwrite, export/import and factory-reset what the node
+ * has accumulated, so a replacement carries on from the node it replaces.
+ * ═══════════════════════════════════════════════════════════════════════ */
+const LC_FIELDS = [
+  { key: 'SEQ_NEXT', label: 'Next event number', doc: 'The number the next event is sent with. One more than the last event Kinetix received from this device.' },
+  { key: 'EVENTS', label: 'Train events recorded', doc: 'Crossings captured over the node’s life.' },
+  { key: 'BASELINES', label: 'Idle baselines recorded', doc: 'Periodic quiet-bridge samples.' },
+  { key: 'BOOTS', label: 'Boots', doc: 'Power-ups and resets of every kind.' },
+  { key: 'UPLOADS_OK', label: 'Successful uploads', doc: 'Upload sessions that completed.' },
+  { key: 'UPLOADS_FAILED', label: 'Failed uploads', doc: 'Upload sessions that did not.' },
+  { key: 'WDT_RESETS', label: 'Watchdog resets', doc: 'Firmware hangs recovered by the watchdog.' },
+  { key: 'BROWNOUT_RESETS', label: 'Brown-out resets', doc: 'Supply collapses - usually the battery sagging under modem load.' },
+  { key: 'FAULT_RESETS', label: 'CPU fault resets', doc: 'Hard faults: firmware bugs.' },
+  { key: 'SENSOR_FAULTS', label: 'Sensor faults', doc: 'Sensor reads that failed.' },
+  { key: 'DAMAGE', label: 'Cumulative fatigue damage', doc: 'Palmgren-Miner sum; CUM_DAMAGE in the cloud.', float: true },
+  { key: 'CLAMPED', label: 'Over-range cycles', doc: 'Cycles at or above the cell’s full scale.' },
+];
+const LC_KEYS = new Set(LC_FIELDS.map(f => f.key));
+const lifecycle = {
+  node: {}, bins: new Array(32).fill(null), info: {},
+  draft: {}, draftBins: new Array(32).fill(null),
+  loaded: false, errors: [],
+};
+const lcNote = t => { $('lc-note').textContent = t; };
+const lcCycles = half => half === null || half === undefined ? null : half / 2;
+const lcFmt = (v, float) => v === null || v === undefined || v === '' ? '—'
+  : float ? Number(v).toExponential(4) : Number(v).toLocaleString();
+
+/* Returns true when the line was a lifecycle line. */
+function lifecycleLine(key, val) {
+  const bin = key.match(/^LC_BIN\[(\d+)\]$/);
+  if (bin) { const i = +bin[1]; if (i < 32) lifecycle.bins[i] = Number(val); return true; }
+  const name = key.slice(3);
+  if (LC_KEYS.has(name)) { lifecycle.node[name] = Number(val); return true; }
+  if (name === 'SEQ_MIN') { lifecycle.info.seqMin = Number(val); return true; }
+  if (name === 'PENDING') { lifecycle.info.pending = Number(val); return true; }
+  if (name === 'UPTIME_H') { lifecycle.info.uptimeH = Number(val); return true; }
+  if (name === 'END') { lifecycle.loaded = true; lifecycle.info.cycles = Number(val); renderLifecycle(); return true; }
+  return false;
+}
+
+function renderLifecycle() {
+  const node = lifecycle.node;
+  let h = '<thead><tr><th>Value</th><th>On node</th><th>New value</th></tr></thead><tbody>';
+  for (const f of LC_FIELDS) {
+    const draft = lifecycle.draft[f.key];
+    const changed = draft !== undefined && draft !== '' && Number(draft) !== node[f.key];
+    let extra = '';
+    if (f.key === 'SEQ_NEXT' && lifecycle.loaded) {
+      extra = `<div class="sub">Lowest allowed: ${lcFmt(lifecycle.info.seqMin)}`
+        + (lifecycle.info.pending ? ` &middot; ${lifecycle.info.pending} event(s) still queued keep their numbers` : '') + '</div>';
+    }
+    h += `<tr><td class="doc"><b>${f.label}</b><div class="sub">${f.doc}</div>${extra}</td>`
+      + `<td>${lcFmt(node[f.key], f.float)}</td>`
+      + `<td><input type="${f.float ? 'text' : 'number'}" min="0" step="${f.float ? 'any' : '1'}" data-lc="${f.key}"`
+      + ` value="${draft ?? ''}" placeholder="${node[f.key] ?? ''}"`
+      + ` style="width:150px${changed ? ';outline:2px solid var(--warn)' : ''}"></td></tr>`;
+  }
+  $('lc-table').innerHTML = h + '</tbody>';
+
+  let b = '<thead><tr>' + '<th>Bin</th><th>Range</th><th>On node</th><th>New</th>'.repeat(4) + '</tr></thead><tbody>';
+  for (let row = 0; row < 8; row++) {
+    b += '<tr>';
+    for (let col = 0; col < 4; col++) {
+      const i = row * 4 + col;
+      const nodeCycles = lcCycles(lifecycle.bins[i]);
+      const draft = lifecycle.draftBins[i];
+      const changed = draft !== null && draft !== '' && Number(draft) !== nodeCycles;
+      b += `<td>${i}</td><td class="sub">${(i * 100 / 32).toFixed(1)}–${((i + 1) * 100 / 32).toFixed(1)}%</td>`
+        + `<td>${lcFmt(nodeCycles)}</td>`
+        + `<td><input type="number" min="0" step="0.5" data-lc-bin="${i}" value="${draft ?? ''}" placeholder="${nodeCycles ?? ''}"`
+        + ` style="width:90px${changed ? ';outline:2px solid var(--warn)' : ''}"></td>`;
+    }
+    b += '</tr>';
+  }
+  $('lc-bins').innerHTML = b + '</tbody>';
+
+  const nodeTotal = lifecycle.bins.reduce((s, v) => s + (lcCycles(v) ?? 0), 0);
+  const newTotal = lifecycle.draftBins.some(v => v !== null && v !== '')
+    ? lifecycle.draftBins.reduce((s, v, i) => s + (v !== null && v !== '' ? Number(v) : (lcCycles(lifecycle.bins[i]) ?? 0)), 0)
+    : null;
+  $('lc-bin-summary').textContent = lifecycle.loaded
+    ? `On node: ${nodeTotal.toLocaleString()} cycles (CUM_CYCLES)` + (newTotal !== null ? ` · after applying: ${newTotal.toLocaleString()} cycles` : '')
+      + ` · ranges are shares of the cell’s full scale`
+    : 'Read from node to see the stored history.';
+}
+
+$('lc-table').addEventListener('input', e => {
+  const k = e.target.dataset.lc; if (!k) return;
+  lifecycle.draft[k] = e.target.value.trim();
+  e.target.style.outline = lifecycle.draft[k] !== '' && Number(lifecycle.draft[k]) !== lifecycle.node[k] ? '2px solid var(--warn)' : '';
+});
+$('lc-bins').addEventListener('input', e => {
+  const i = e.target.dataset.lcBin; if (i === undefined) return;
+  lifecycle.draftBins[+i] = e.target.value.trim();
+  renderLifecycleSummaryOnly();
+});
+function renderLifecycleSummaryOnly() {
+  // Re-rendering the whole table would steal focus from the input being typed in.
+  const nodeTotal = lifecycle.bins.reduce((s, v) => s + (lcCycles(v) ?? 0), 0);
+  const newTotal = lifecycle.draftBins.reduce((s, v, i) => s + (v !== null && v !== '' ? Number(v) || 0 : (lcCycles(lifecycle.bins[i]) ?? 0)), 0);
+  $('lc-bin-summary').textContent = `On node: ${nodeTotal.toLocaleString()} cycles (CUM_CYCLES) · after applying: ${newTotal.toLocaleString()} cycles`;
+}
+
+async function lcRead() {
+  lifecycle.node = {}; lifecycle.bins.fill(null); lifecycle.info = {}; lifecycle.loaded = false;
+  lcNote('Reading…');
+  try { await send('GET_LIFECYCLE'); lcNote(lifecycle.loaded ? 'Read from node.' : 'The node did not send its lifecycle values - update its firmware.'); }
+  catch (err) { lcNote('Read failed: ' + err.message); }
+}
+
+async function lcApply() {
+  if (!lifecycle.loaded) { lcNote('Read from node first, so changes are checked against what it holds.'); return; }
+  const commands = [];
+  const problems = [];
+  for (const f of LC_FIELDS) {
+    const raw = lifecycle.draft[f.key];
+    if (raw === undefined || raw === '') continue;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || (!f.float && !Number.isInteger(n))) { problems.push(`${f.label}: must be ${f.float ? 'a number' : 'a whole number'} of 0 or more`); continue; }
+    if (f.key === 'SEQ_NEXT' && n < Math.max(1, lifecycle.info.seqMin ?? 1)) { problems.push(`Next event number must be at least ${Math.max(1, lifecycle.info.seqMin ?? 1)}`); continue; }
+    if (n === lifecycle.node[f.key]) continue;
+    commands.push({ cmd: `SET_LC_${f.key}=${f.float ? n.toPrecision(7) : n}`, label: `${f.label}: ${lcFmt(lifecycle.node[f.key], f.float)} → ${lcFmt(n, f.float)}` });
+  }
+  lifecycle.draftBins.forEach((raw, i) => {
+    if (raw === null || raw === '') return;
+    const cycles = Number(raw);
+    const half = Math.round(cycles * 2);
+    if (!Number.isFinite(cycles) || cycles < 0 || Math.abs(half - cycles * 2) > 1e-9) { problems.push(`Bin ${i}: whole or half cycles of 0 or more`); return; }
+    if (half === lifecycle.bins[i]) return;
+    commands.push({ cmd: `SET_LC_BIN=${i},${half}`, label: `Bin ${i}: ${lcFmt(lcCycles(lifecycle.bins[i]))} → ${cycles} cycles` });
+  });
+  if (problems.length) { lcNote('Not applied: ' + problems.join('; ')); return; }
+  if (!commands.length) { lcNote('No changes to apply.'); return; }
+
+  const summary = commands.slice(0, 12).map(c => ' • ' + c.label).join('\n') + (commands.length > 12 ? `\n • …and ${commands.length - 12} more` : '');
+  if (!confirm(`Write ${commands.length} change(s) to this node?\n\n${summary}`)) return;
+
+  lifecycle.errors = [];
+  try {
+    for (const [i, c] of commands.entries()) { lcNote(`Writing ${i + 1} of ${commands.length}…`); await send(c.cmd); }
+    // The event number is saved as it is set; everything else needs LC_SAVE.
+    if (commands.some(c => !c.cmd.startsWith('SET_LC_SEQ_NEXT'))) await send('LC_SAVE');
+  } catch (err) {
+    lcNote('Stopped: ' + err.message + '. Nothing unsaved reached flash; read from node to see what it holds.');
+    return;
+  }
+  if (lifecycle.errors.length) {
+    lcNote('Some values were refused: ' + lifecycle.errors.join('; ') + '. Read from node to see what it holds.');
+  } else {
+    lifecycle.draft = {}; lifecycle.draftBins.fill(null);
+    lcNote(`Applied ${commands.length} change(s) and saved to flash.`);
+  }
+  await lcRead();
+}
+
+function lcExport() {
+  if (!lifecycle.loaded) { lcNote('Read from node first - an export records what the node holds.'); return; }
+  const text = id => ($(id)?.textContent ?? '').trim();
+  const doc = {
+    format: 'strusense-lifecycle', version: 1,
+    exported_at: new Date().toISOString(),
+    device: text('d-name'), ble_mac: text('d-mac'), firmware: text('d-fw'),
+    seq_next: lifecycle.node.SEQ_NEXT,
+    counters: Object.fromEntries(LC_FIELDS.filter(f => !['SEQ_NEXT', 'DAMAGE', 'CLAMPED'].includes(f.key)).map(f => [f.key, lifecycle.node[f.key]])),
+    fatigue: {
+      damage: lifecycle.node.DAMAGE,
+      over_range_cycles: lifecycle.node.CLAMPED,
+      half_cycles: lifecycle.bins.slice(),
+      cycles_total: lifecycle.info.cycles,
+    },
+    uptime_h_at_export: lifecycle.info.uptimeH,
+  };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
+  a.download = `${(doc.device && doc.device !== '—' ? doc.device : 'strusense')}_lifecycle_${doc.exported_at.slice(0, 10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  lcNote(`Exported ${a.download}.`);
+}
+
+function lcImport(textContent) {
+  let doc;
+  try { doc = JSON.parse(textContent); } catch { lcNote('Not a lifecycle file: it is not valid JSON.'); return; }
+  const whole = v => Number.isInteger(v) && v >= 0;
+  if (doc?.format !== 'strusense-lifecycle' || doc.version !== 1) { lcNote('Not a lifecycle file exported by this console.'); return; }
+  const bins = doc.fatigue?.half_cycles;
+  if (!Array.isArray(bins) || bins.length !== 32 || !bins.every(whole)) { lcNote('The file’s fatigue bins are missing or invalid; nothing loaded.'); return; }
+  if (!whole(doc.seq_next) || doc.seq_next < 1) { lcNote('The file’s event number is missing or invalid; nothing loaded.'); return; }
+
+  lifecycle.draft = { SEQ_NEXT: String(doc.seq_next) };
+  for (const [k, v] of Object.entries(doc.counters ?? {})) if (LC_KEYS.has(k) && whole(v)) lifecycle.draft[k] = String(v);
+  if (Number.isFinite(doc.fatigue.damage) && doc.fatigue.damage >= 0) lifecycle.draft.DAMAGE = String(doc.fatigue.damage);
+  if (whole(doc.fatigue.over_range_cycles)) lifecycle.draft.CLAMPED = String(doc.fatigue.over_range_cycles);
+  lifecycle.draftBins = bins.map(h => String(h / 2));
+  renderLifecycle();
+
+  const connected = ($('d-name')?.textContent ?? '').trim();
+  const other = doc.device && connected && connected !== '—' && doc.device !== connected
+    ? ` It came from ${doc.device}, not ${connected} - expected when replacing a node.` : '';
+  lcNote(`Loaded the file exported ${String(doc.exported_at).slice(0, 10)}.${other} Review the New value column, then Apply to node.`);
+}
+
+$('btn-lc-read').onclick = lcRead;
+$('btn-lc-apply').onclick = lcApply;
+$('btn-lc-export').onclick = lcExport;
+$('btn-lc-import').onclick = () => $('lc-file').click();
+$('lc-file').onchange = e => { const f = e.target.files[0]; if (f) f.text().then(lcImport); e.target.value = ''; };
+$('btn-lc-clear').onclick = () => { lifecycle.draft = {}; lifecycle.draftBins.fill(null); renderLifecycle(); lcNote('New values cleared.'); };
+$('btn-lc-bins-zero').onclick = () => { lifecycle.draftBins.fill('0'); renderLifecycle(); lcNote('All bins set to 0 in the New column. Apply to node to write them.'); };
+$('btn-lc-factory').onclick = async () => {
+  if ($('lc-factory-confirm').value.trim() !== 'RESET') { lcNote('Type RESET in the box to confirm a factory default.'); return; }
+  if (!confirm('Reset every lifetime counter and the whole fatigue history to zero?\n\nEvent numbering restarts at 1 if nothing is queued. Calibration, settings and provisioning are kept.\n\nThis cannot be undone. Export first if you may need the values.')) return;
+  lifecycle.errors = [];
+  await send('LC_FACTORY=ERASE');
+  $('lc-factory-confirm').value = '';
+  lcNote(lifecycle.errors.length ? 'Factory default failed: ' + lifecycle.errors.join('; ') : 'Reset to factory default.');
+  await lcRead();
+};
+renderLifecycle();
+
 $('btn-tbl').onclick = () => { const w=$('tbl-wrap'); w.hidden=!w.hidden;
   $('btn-tbl').textContent = w.hidden?'Show table':'Hide table'; };
 
@@ -2477,7 +3504,6 @@ $('btn-cell-wr').onclick = async () => {
   await send('SET_CFG_CAPACITY_KN='+parseFloat($('c-cap').value));
   await send('SET_CFG_MV_PER_V='+parseFloat($('c-mvv').value));
   await send('SET_CFG_PGA_GAIN='+parseInt($('c-gain').value,10));
-  await send('SET_CFG_VREF_MV='+parseInt($('c-vref').value,10));
   await send('COMMIT_CFG'); await send('GET_CAL');
   $('cell-note').textContent = 'Applied. Any previous span calibration was cleared.';
 };
@@ -2494,7 +3520,256 @@ $('btn-calclr').onclick = () => send('CAL_CLEAR');
  * authority — the label only changes when STREAM= comes back. */
 let streamOn = false;
 $('btn-stream').onclick = () => send('STREAM=' + (streamOn ? 0 : 1));
-['c-mvv','c-gain','c-vref'].forEach(id => $(id).addEventListener('input', recalcCell));
+['c-mvv','c-gain'].forEach(id => $(id).addEventListener('input', recalcCell));
+
+/* ── Live reading and dead load ───────────────────────────────────────────────
+ *
+ * SAMPLE=0x8102F1,raw=66289,mvv=0.061737,uv=185.209,kn=4.630,gain=128,ch=0
+ *
+ * mV/V is recomputed here from the raw code and the gain rather than taken from
+ * the printed figure, so an average over many readings keeps the resolution of
+ * the converter instead of the six printed decimals. Older firmware printed
+ * uV= and kN= without mvv or gain; those lines still display, using the gain
+ * from the load cell card.
+ */
+/* Unlike setTxt, always resets the colour: a reading that was over range a
+ * second ago must not stay red once it is back in range. */
+const liveTxt = (id, t, c) => { const e = $(id); if (e) { e.textContent = t; e.style.color = c || ''; } };
+const FULL_SCALE_CODES = 8388608;
+const LIVE_WINDOW_MS = 60000;
+const live = { hist: [], last: null, lastAt: 0 };
+const dl = { on: false, samples: [], gain: 0, over: 0, t0: 0, ms: 0,
+             startedStream: false, timer: null, result: null };
+
+function parseSample(val) {
+  const parts = String(val).split(',');
+  const s = { hex: parts[0], over: parts.includes('OVERRANGE') };
+  for (const p of parts.slice(1)) {
+    const i = p.indexOf('=');
+    if (i > 0) s[p.slice(0, i).toLowerCase()] = p.slice(i + 1);
+  }
+  s.raw  = Number(s.raw);
+  s.gain = Number(s.gain) || parseInt($('c-gain').value, 10) || 0;
+  s.mvv  = (Number.isFinite(s.raw) && s.gain > 0) ? s.raw / FULL_SCALE_CODES / s.gain * 1000 : NaN;
+  s.uv   = Number.isFinite(s.mvv) ? s.mvv * excitationMv : Number(s.uv);
+  s.kn   = Number(s.kn);
+  s.ch   = Number(s.ch);
+  return s;
+}
+
+function describeSample(s) {
+  if (!Number.isFinite(s.mvv)) return s.hex || '—';
+  return `${s.mvv.toFixed(6)} mV/V · ${s.uv.toFixed(3)} µV · raw ${s.raw} · gain ${s.gain}`
+       + (s.over ? ' · OVERRANGE' : '');
+}
+
+/* Microstrain from the output settings on card 4, the same formula the node and
+ * the cloud use. NaN when those settings have not been read. */
+function strainOf(mvv) {
+  const gf = parseFloat($('o-gf').value);
+  const arms = [1, 2, 4][parseInt($('o-bridge').value, 10) || 0];
+  const zero = parseFloat($('o-zero').value) || 0;
+  if (!(gf > 0) || !Number.isFinite(mvv)) return NaN;
+  return 4000 * (mvv - zero) / (arms * gf);
+}
+
+function cellSpec() {
+  return { cap: parseFloat($('c-cap').value), rated: parseFloat($('c-mvv').value) };
+}
+
+function onSample(s) {
+  const now = Date.now();
+  live.last = s; live.lastAt = now;
+  if (Number.isFinite(s.mvv)) {
+    live.hist.push({ t: now, mvv: s.mvv });
+    while (live.hist.length && now - live.hist[0].t > LIVE_WINDOW_MS) live.hist.shift();
+  }
+  if (dl.on) collectDeadLoad(s);
+
+  const { cap, rated } = cellSpec();
+  liveTxt('lv-mvv', Number.isFinite(s.mvv) ? s.mvv.toFixed(6) : '—', s.over ? 'var(--crit)' : '');
+  liveTxt('lv-kn', Number.isFinite(s.kn) ? s.kn.toFixed(3) : '—');
+  liveTxt('lv-kn-sub', $('k-valid').textContent === 'calibrated'
+    ? 'tare and span applied' : 'nominal: uncalibrated, not tared');
+  const ue = strainOf(s.mvv);
+  liveTxt('lv-ue', Number.isFinite(ue) ? ue.toFixed(1) : '—');
+  if (Number.isFinite(ue)) {
+    const bridge = ['quarter', 'half', 'full'][parseInt($('o-bridge').value, 10) || 0];
+    liveTxt('lv-ue-sub', `GF ${$('o-gf').value} · ${bridge} · zero ${$('o-zero').value || 0}`);
+  }
+  liveTxt('lv-uv', Number.isFinite(s.uv) ? s.uv.toFixed(3) : '—');
+  const pct = (rated > 0 && Number.isFinite(s.mvv)) ? s.mvv / rated * 100 : NaN;
+  liveTxt('lv-fs', Number.isFinite(pct) ? pct.toFixed(2) : '—',
+         Math.abs(pct) > 100 ? 'var(--crit)' : '');
+  liveTxt('lv-fs-sub', rated > 0 ? `of ${rated} mV/V${cap > 0 ? ' = ' + cap + ' kN' : ''}` : 'rated output not read');
+  liveTxt('lv-raw', Number.isFinite(s.raw) ? String(s.raw) : '—');
+  liveTxt('lv-raw-sub', `${s.hex} · gain ${s.gain || '?'} · ch ${Number.isFinite(s.ch) ? s.ch : '?'}`
+         + (s.over ? ' · OVERRANGE' : ''), s.over ? 'var(--crit)' : '');
+  liveTxt('k-live', Number.isFinite(s.mvv)
+    ? `${s.mvv.toFixed(6)} mV/V · ${Number.isFinite(s.kn) ? s.kn.toFixed(3) : '—'} kN` : s.hex);
+  liveTxt('a-read', describeSample(s));
+  drawLiveChart();
+  paintLiveState();
+}
+
+function drawLiveChart() {
+  const svg = $('lv-spark');
+  const pts = live.hist;
+  if (pts.length < 2) { svg.innerHTML = ''; return; }
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p.mvv); hi = Math.max(hi, p.mvv); }
+  /* Never let a quiet signal fill the height with converter noise: at least
+   * 0.0002 mV/V of span, 0.01% of a 2 mV/V cell (15 N on 150 kN). */
+  const pad = Math.max((hi - lo) * 0.15, 0.0001);
+  const y0 = lo - pad, y1 = hi + pad;
+  const t1 = pts[pts.length - 1].t, t0 = t1 - LIVE_WINDOW_MS;
+  const X = t => ((t - t0) / LIVE_WINDOW_MS) * 600;
+  const Y = v => 96 - ((v - y0) / (y1 - y0)) * 96;
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.t).toFixed(1)},${Y(p.mvv).toFixed(2)}`).join('');
+  let mean = '';
+  if (dl.result) {
+    const ym = Y(dl.result.mvv);
+    if (ym >= 0 && ym <= 96) mean = `<line class="mean" x1="0" x2="600" y1="${ym.toFixed(2)}" y2="${ym.toFixed(2)}"></line>`;
+  }
+  svg.innerHTML = mean + `<path class="ln" d="${d}"></path>`;
+  liveTxt('lv-lo', lo.toFixed(6));
+  liveTxt('lv-hi', hi.toFixed(6));
+  liveTxt('lv-span', `last ${Math.round((t1 - pts[0].t) / 1000)} s · mV/V`
+         + (dl.result ? ' · dashed = dead load' : ''));
+}
+
+function paintLiveState() {
+  const age = live.lastAt ? (Date.now() - live.lastAt) / 1000 : Infinity;
+  const fresh = streamOn && age < 4;
+  $('lv-badge').classList.toggle('on', fresh);
+  liveTxt('lv-state', dl.on ? 'measuring dead load' : streamOn ? (fresh ? 'streaming' : 'waiting for readings') : 'stopped');
+  if (!live.lastAt) return;
+  const stale = streamOn && age >= 4;
+  liveTxt('lv-age', `Last reading ${age < 1 ? 'just now' : Math.round(age) + ' s ago'}`
+         + (stale ? ' — the node has stopped sending' : ''), stale ? 'var(--warn)' : '');
+}
+setInterval(paintLiveState, 1000);
+
+function dlNote(msg, color) { liveTxt('dl-note', msg, color || ''); }
+
+async function startDeadLoad() {
+  if (dl.on) return;
+  dl.ms = parseInt($('dl-secs').value, 10) * 1000;
+  Object.assign(dl, { samples: [], gain: 0, over: 0, result: null, startedStream: false });
+  ['dl-mvv','dl-kn','dl-n','dl-sd','dl-drift','dl-range','dl-verdict'].forEach(id => liveTxt(id, '—'));
+  $('btn-dl-copy').disabled = $('btn-dl-zero').disabled = true;
+  try {
+    if (!streamOn) { dl.startedStream = true; await send('STREAM=1'); }
+  } catch (e) {
+    dlNote('Could not start the live stream: ' + (e.message || e), 'var(--warn)');
+    return;
+  }
+  dl.on = true; dl.t0 = Date.now();
+  $('btn-dl').hidden = true; $('btn-dl-stop').hidden = false; $('dl-bar').hidden = false;
+  dlNote(`Averaging for ${dl.ms / 1000} s. Keep the span clear.`);
+  dl.timer = setInterval(() => {
+    const f = Math.min(1, (Date.now() - dl.t0) / dl.ms);
+    $('dl-fill').style.width = (f * 100).toFixed(1) + '%';
+    if (f >= 1) finishDeadLoad(false);
+  }, 250);
+  paintLiveState();
+}
+
+function collectDeadLoad(s) {
+  if (!Number.isFinite(s.raw) || !(s.gain > 0)) return;
+  if (dl.gain && s.gain !== dl.gain) {
+    finishDeadLoad(true, 'The ADC gain changed during the measurement. Run it again.');
+    return;
+  }
+  dl.gain = s.gain;
+  if (s.over) { dl.over++; return; }
+  dl.samples.push({ t: Date.now(), raw: s.raw });
+}
+
+async function finishDeadLoad(aborted, why) {
+  if (!dl.on) return;
+  dl.on = false;
+  clearInterval(dl.timer);
+  $('btn-dl').hidden = false; $('btn-dl-stop').hidden = true; $('dl-bar').hidden = true;
+  $('dl-fill').style.width = '0';
+  if (dl.startedStream) { try { await send('STREAM=0'); } catch (_) { /* link gone; nothing to stop */ } }
+  paintLiveState();
+  if (aborted && why) { dlNote(why, 'var(--warn)'); return; }
+  const r = deadLoadResult(dl.samples, dl.gain, cellSpec());
+  if (!r) {
+    dlNote(dl.over ? `Every reading was over range (${dl.over}). Check the wiring and the gain.`
+                   : 'Too few readings to average. Is the node connected and streaming?', 'var(--warn)');
+    return;
+  }
+  dl.result = r;
+  showDeadLoad(r);
+  dlNote((aborted ? 'Stopped early. ' : '') + (dl.over ? `${dl.over} over-range reading(s) left out. ` : '')
+         + 'Copy the value into Kinetix, or use it as the node’s strain zero.');
+  drawLiveChart();
+}
+
+/* Averaged on the raw codes: one code is 9.3e-7 mV/V at gain 128, and the mean
+ * of a minute of readings resolves well below that. */
+function deadLoadResult(samples, gain, spec) {
+  const n = samples.length;
+  if (n < 10 || !(gain > 0)) return null;
+  const toMvv = raw => raw / FULL_SCALE_CODES / gain * 1000;
+  let sum = 0, lo = Infinity, hi = -Infinity;
+  for (const s of samples) { sum += s.raw; lo = Math.min(lo, s.raw); hi = Math.max(hi, s.raw); }
+  const mean = sum / n;
+  let ss = 0;
+  for (const s of samples) ss += (s.raw - mean) ** 2;
+  const sdRaw = Math.sqrt(ss / (n - 1));
+  const half = Math.floor(n / 2);
+  const avg = arr => arr.reduce((a, s) => a + s.raw, 0) / arr.length;
+  const driftRaw = avg(samples.slice(half)) - avg(samples.slice(0, half));
+  const mvv = toMvv(mean), sd = toMvv(sdRaw), drift = toMvv(driftRaw);
+  const kn = (spec.rated > 0 && spec.cap > 0) ? mvv / spec.rated * spec.cap : NaN;
+  const rated = spec.rated > 0 ? spec.rated : 2;
+  const sdPct = sd / rated * 100, driftPct = Math.abs(drift) / rated * 100;
+  const verdict = n < 20 ? ['few readings — use a longer window', 'var(--warn)']
+    : (sdPct < 0.05 && driftPct < 0.05) ? ['steady — good to use', 'var(--good)']
+    : (sdPct < 0.2 && driftPct < 0.2) ? ['usable, some movement', 'var(--warn)']
+    : ['not settled — traffic, wind or warm-up; measure again', 'var(--crit)'];
+  return { n, gain, mvv, sd, drift, lo: toMvv(lo), hi: toMvv(hi), kn, sdPct, driftPct, verdict };
+}
+
+function showDeadLoad(r) {
+  const { cap, rated } = cellSpec();
+  const knPer = (rated > 0 && cap > 0) ? cap / rated : NaN;
+  const asKn = v => Number.isFinite(knPer) ? ` (${(v * knPer).toFixed(3)} kN)` : '';
+  liveTxt('dl-mvv', r.mvv.toFixed(6) + ' mV/V');
+  liveTxt('dl-kn', Number.isFinite(r.kn) ? r.kn.toFixed(3) + ' kN, nominal' : 'rated output not read');
+  liveTxt('dl-n', `${r.n} at gain ${r.gain}`);
+  liveTxt('dl-sd', r.sd.toFixed(6) + ' mV/V' + asKn(r.sd));
+  liveTxt('dl-drift', (r.drift >= 0 ? '+' : '') + r.drift.toFixed(6) + ' mV/V' + asKn(Math.abs(r.drift)));
+  liveTxt('dl-range', `${r.lo.toFixed(6)} / ${r.hi.toFixed(6)}`);
+  liveTxt('dl-verdict', r.verdict[0], r.verdict[1]);
+  $('btn-dl-copy').disabled = false;
+  $('btn-dl-zero').disabled = !(Math.abs(r.mvv) <= 10);
+}
+
+$('btn-dl').onclick = () => startDeadLoad();
+$('btn-dl-stop').onclick = () => finishDeadLoad(true);
+$('btn-dl-copy').onclick = async () => {
+  if (!dl.result) return;
+  const text = dl.result.mvv.toFixed(6);
+  try { await navigator.clipboard.writeText(text); dlNote(`Copied ${text} mV/V.`); }
+  catch (_) { dlNote(`Copy it by hand: ${text} mV/V.`); }
+};
+$('btn-dl-zero').onclick = async () => {
+  if (!dl.result) return;
+  const v = dl.result.mvv.toFixed(6);
+  if (!confirm(`Store ${v} mV/V as the node's strain zero?\n\nIt is used only when the node sends microstrain. Kinetix keeps its own zero, set on the device.`)) return;
+  try {
+    await send('SET_CFG_STRAIN_ZERO_MV_V=' + v);
+    $('o-zero').value = v;
+    paintOutput();
+    dlNote(`Strain zero set to ${v} mV/V on the node.`, 'var(--good)');
+  } catch (e) {
+    dlNote('Not stored: ' + (e.message || e), 'var(--warn)');
+  }
+};
 
 /* Trigger */
 /* ── Profiling: per-second peak deviation ─────────────────────────────────────
@@ -2698,21 +3973,42 @@ $('btn-wake-save').onclick = async () => {
 ['w-act','w-inact'].forEach(id => $(id).addEventListener('input', chartRender));
 
 /* Cloud */
-$('btn-prov-rd').onclick = async () => { await send('GET_CLOUD_STATUS'); await send('GET_TB_TOKEN'); };
+$('btn-prov-rd').onclick = async () => {
+  /* Clear first. Otherwise a field the node does not report keeps whatever was
+     typed into it, and the panel shows a value the device does not have. */
+  ['p-topic','p-addr'].forEach(id => setTxt(id, '\u2014'));
+  await send('GET_CLOUD_STATUS');
+  await send('GET_TB_TOKEN');
+};
 $('btn-prov-wr').onclick = async () => {
-  const t=$('p-token').value.trim(), h=$('p-host').value.trim(), p=$('p-port').value.trim();
-  if (t) await send('SET_TB_TOKEN='+t);
-  if (h) await send('SET_TB_HOST='+h);
-  if (p) await send('SET_TB_PORT='+p);
-  await send('SET_APN='+$('p-apn').value.trim());
-  await send('COMMIT_CFG');
-  $('prov-note').textContent = 'Committed.';
+  const t = $('p-token').value.trim();
+  const h = $('p-host').value.trim();
+  const p = $('p-port').value.trim();
+  const proj = $('p-project').value.trim();
+  const dev = $('p-device').value.trim();
+
+  /* A device label becomes a topic segment. The node rejects these too, but
+     saying so here costs nothing and explains itself better than ERR=PARAM. */
+  if (dev && /[\/+#]/.test(dev)) {
+    $('prov-note').textContent =
+      'Device label cannot contain / + or # — it becomes part of the MQTT topic.';
+    return;
+  }
+
+  if (t) await send('SET_TB_TOKEN=' + t);
+  if (h) await send('SET_TB_HOST=' + h);
+  await send('SET_TB_TLS=' + $('p-tls').value);
+  if (p) await send('SET_TB_PORT=' + p);
+  if (proj) await send('SET_PROJECT=' + proj);
+  if (dev) await send('SET_DEVICE=' + dev);
+  await send('SET_APN=' + $('p-apn').value.trim());
+
+  /* No COMMIT_CFG: the node persists each provisioning field as it is set.
+     Read back rather than assume - the whole point of the panel below. */
+  await send('GET_CLOUD_STATUS');
+  $('prov-note').textContent = 'Written and stored. Check the topic below.';
 };
 $('btn-cloud-wr').onclick = async () => {
-  await send('SET_CFG_UPLOAD_POLICY='    + $('cl-policy').value);
-  await send('SET_CFG_UPLOAD_MIN_GAP_S=' + parseInt($('cl-gap').value, 10));
-  await send('SET_CFG_POWER_SOURCE='     + $('cl-src').value);
-  await send('SET_CFG_UPLOAD_INT_MIN='+parseInt($('cl-int').value,10));
   await send('SET_CFG_ENABLE_BASELINE='+$('cl-base').value);
   await send('SET_CFG_BASELINE_INT_MIN='+parseInt($('cl-bint').value,10));
   await send('SET_CFG_BASELINE_DUR_S='+parseInt($('cl-bdur').value,10));
@@ -2754,11 +4050,117 @@ $('btn-ms').onclick = () => {
 };
 $('btn-ms-off').onclick = () => send('MODEM_OFF');
 $('btn-simtrain').onclick = () => send('SIM_TRAIN');
-$('btn-reboot').onclick = () => { if (confirm('Reboot the node?')) send('REBOOT'); };
+const doReboot = () => {
+  /* A soft reset. Provisioning, fatigue totals and the event queue all live in
+   * NVM3 and survive it; anything mid-flight does not, which is why it asks. */
+  if (confirm('Reboot the node?\n\nProvisioning, fatigue totals and queued '
+            + 'events survive. A capture or upload in progress does not.'))
+    send('REBOOT');
+};
+$('btn-reboot').onclick  = doReboot;
+$('btn-reboot2').onclick = doReboot;
+
+/* Renaming from the Dashboard, where the name is displayed. SET_DEVICE commits
+ * to NVM3 and re-advertises, so the new name is visible to a scanning phone
+ * before the operator has put the laptop down. */
+$('btn-rename').onclick = async () => {
+  const name = $('d-rename').value.trim();
+  if (!name) return log('Enter a name first.', 'l-err');
+  if (!/^[A-Za-z0-9_-]+$/.test(name))
+    return log('Use letters, digits, dash or underscore only — the name '
+             + 'becomes a segment of the MQTT topic.', 'l-err');
+  await send('SET_DEVICE=' + name);
+  await send('GET_CLOUD_STATUS');
+};
 
 /* Settings */
-$('btn-cfg-rd').onclick = () => send('GET_CONFIG');
-$('btn-cfg-wr').onclick = writeConfig;
+$('btn-cfg-rd').onclick = $('btn-cfg-rd-top').onclick = () => send('GET_CONFIG');
+$('cfg-filter').oninput = () => {
+  const q = $('cfg-filter').value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('#cfg-table details.card').forEach(card => {
+    let any = false;
+    card.querySelectorAll('tr[data-cfg-row]').forEach(tr => {
+      const hit = !q || (cfgSearch.get(tr.dataset.cfgRow) || '').includes(q);
+      tr.hidden = !hit;
+      if (hit) { any = true; shown++; }
+    });
+    card.hidden = !any;
+    if (q && any) card.open = true;
+  });
+  $('cfg-filter-note').textContent = q ? `${shown} matching setting(s)` : '';
+};
+
+/* What the node sends — Commissioning step 4 */
+function paintOutput() {
+  const ue = $('o-qty').value === '1';
+  /* Dimmed, not hidden: the parameters are worth setting before switching. */
+  $('o-strain').style.opacity = ue ? '' : '.6';
+  const arms = [1, 2, 4][+$('o-bridge').value];
+  const gf = parseFloat($('o-gf').value);
+  const zero = parseFloat($('o-zero').value) || 0;
+  const k = (gf > 0 && arms) ? 4000 / (arms * gf) : NaN;
+  if (Number.isFinite(k))
+    setTxt('o-conv', `1 mV/V = ${k.toFixed(1)} µε` + (zero ? ` · zero ${zero} mV/V` : ''), '');
+  else
+    setTxt('o-conv', 'enter a gauge factor', 'var(--warn)');
+  setTxt('o-keys', ue ? 'STRAIN_PEAK, STRAIN_1S (µε)' : 'LOAD_PEAK, LOAD_1S (mV/V)', '');
+}
+['o-qty','o-gf','o-bridge','o-zero'].forEach(id => $(id).addEventListener('input', paintOutput));
+/* GET_CONFIG, not GET_WAKE: the output settings are no longer repeated in the
+ * wake reply, which has to stay short to arrive whole. */
+$('btn-out-rd').onclick = () => send('GET_CONFIG');
+$('btn-out-wr').onclick = async () => {
+  const note = $('out-note');
+  const gfText = $('o-gf').value.trim();
+  const gf = parseFloat(gfText), zero = parseFloat($('o-zero').value || '0');
+  const ue = $('o-qty').value === '1';
+  if ((ue || gfText) && !(gf >= 0.5 && gf <= 5)) {
+    note.textContent = 'Gauge factor must be between 0.5 and 5 — take it from the gauge datasheet.'; return;
+  }
+  if (!(zero >= -10 && zero <= 10)) { note.textContent = 'Zero offset must be between −10 and 10 mV/V.'; return; }
+  note.textContent = 'Applying…';
+  try {
+    /* Parameters before the switch, so the node never sends microstrain
+     * worked out with the previous gauge factor. */
+    if (gfText) await send('SET_CFG_GAUGE_FACTOR=' + gf);
+    await send('SET_CFG_BRIDGE=' + $('o-bridge').value);
+    await send('SET_CFG_STRAIN_ZERO_MV_V=' + zero);
+    await send('SET_CFG_OUTPUT_QUANTITY=' + $('o-qty').value);
+    await send('GET_CONFIG');
+    note.textContent = 'Stored on the node. The values above are read back from it.';
+  } catch (err) {
+    note.textContent = 'Stopped: ' + err.message + '. Press Read to see what the node holds.';
+  }
+};
+
+/* Cloud: security, connection test, resets */
+$('p-tls').onchange = () => {
+  /* Follow the standard port unless someone typed a custom one. */
+  const port = $('p-port').value.trim();
+  if (!port || port === '8883' || port === '1883')
+    $('p-port').value = $('p-tls').value === '1' ? '8883' : '1883';
+};
+$('btn-mq-test').onclick = () => {
+  for (const id of ['mq-broker','mq-topic','mq-at','mq-net','mq-pdp','mq-connect','mq-publish'])
+    setTxt(id, '…', 'inherit');   /* clear a previous run's red */
+  send('MQTT_TEST');
+};
+$('btn-queue-clear').onclick = async () => {
+  if (!confirm('Discard every event waiting to upload?\n\nThey are the only copy of those passages and cannot be recovered.')) return;
+  await send('QUEUE_CLEAR=ERASE');
+  await send('STATUS');
+};
+$('btn-prov-clear').onclick = async () => {
+  if (!confirm('Reset provisioning to defaults?\n\nThe device key, project and device label are wiped. The node cannot upload until it is provisioned again.')) return;
+  await send('PROV_CLEAR=ERASE');
+  await send('GET_CLOUD_STATUS');
+  await send('GET_TB_TOKEN');
+};
+$('btn-ad-pwr-on').onclick  = () => send('AD_POWER=1');
+$('btn-ad-pwr-off').onclick = () => send('AD_POWER=0');
+$('btn-cfg-wr').onclick = () => writeConfig();
+$('cfg-table').oninput = event => { event.target.dataset.edited = '1'; };
 $('btn-cfg-exp').onclick = exportCsv;
 $('btn-cfg-imp').onclick = () => $('cfg-file').click();
 $('cfg-file').onchange = e => { const f=e.target.files[0];
@@ -2796,7 +4198,7 @@ function loadDemo() {
    'CSQ=22','PENDING=3','LIFE_EVENTS=1482','SENSOR_FAULTS=0','WDT_RESETS=1',
    'TEMP_C=18.44','BATT_MV=3592','SITE=GDV-S3-N07',
    'CAL_VALID=0','CAL_ZERO=0','CAL_SPAN=1.00000','CAPACITY_KN=150.0','MV_PER_V=2.000',
-   'PGA_GAIN=128','VREF_UV=3000000,AUTO','FS_UV=3000.0',
+   'PGA_GAIN=128','EXCITATION_MV=3000','FS_UV=6000.0',
    'WAKE_SOURCE=ACCEL','WAKE_ACCEL_PRESENT=1',
    'ACT_MG=118.0','INACT_MG=59.0','ACTIVITY_TIME_MS=120','INACTIVITY_MS=2000',
    'WAKE_CONFIRM_MS=400','AUTOSLEEP=1','ACCEL_REF_VALID=1',
@@ -2811,7 +4213,9 @@ function loadDemo() {
    'FAT_CUTOFF_MPA=29.0','TIME_SRC=SET',
    'FAT_HINT=no stress_per_kn - damage is a placeholder. Set SET_CFG_FAT_STRESS_PER_KN=<MPa per kN>',
    'TB_HOST=dashboard.bridgethings.com','TB_PORT=1883','TB_TOKEN=20A71696957B_TOKEN',
-   'TB_TOKEN_SET=0','APN=','CLOUD_READY=1',
+   'TB_TOKEN_SET=0','TB_TLS=1','APN=','CLOUD_READY=1','RAIL_ON=0',
+   'MQ_BROKER=kinetix.bridgethings.com:8883,tls=1','MQ_TOPIC=kx/v1/prj_demo/LDP001LT/status',
+   'MQ_AT=OK','MQ_NET=OK','MQ_PDP=OK','MQ_CONNECT=OK','MQ_PUBLISH=OK',
    'ACC_PART=ADXL367','ACC_ADDR=0x53',
    'ACC_ID=0xAD/0x1D/0xF7,expect=0xAD/0x1D/0xF7,MATCH','ACC_REV=0x03',
    'ACC_MEASURING=1','ACC_REGS=status 0x01,filter 0x13,power 0x02',
@@ -2839,14 +4243,15 @@ function loadDemo() {
   PROF_ACTIVE = 'base';
 
   CFG.forEach(r => { if (isHeading(r)) return;
-    const d = {CAPACITY_KN:150,MV_PER_V:2,PGA_GAIN:128,VREF_MV:0,ADC_CHOP:0,
+    const d = {CAPACITY_KN:150,MV_PER_V:2,PGA_GAIN:128,ADC_CHOP:0,RAIL_MODE:1,RAIL_SETTLE_MS:50,OUTPUT_QUANTITY:0,GAUGE_FACTOR:2,BRIDGE:0,STRAIN_ZERO_MV_V:0,
       ACTIVITY_MG:118,INACTIVITY_MG:59,ACTIVITY_TIME_MS:120,INACTIVITY_MS:2000,
       WAKE_CONFIRM_MS:400,PROFILE_BASE_S:60,PROFILE_TRAIN_S:60,
       TRAIN_TIMEOUT_S:180,LOAD_RATE_HZ:100,ACCEL_RATE_HZ:25,
-      LOAD_END_FRAC:0.1,POWER_SOURCE:1,UPLOAD_POLICY:0,UPLOAD_MIN_GAP_S:0,
-      UPLOAD_INT_MIN:60,UPLOAD_RETRIES:2,
-      ENABLE_BASELINE:1,BASELINE_INT_MIN:30,BASELINE_DUR_S:5,CHAR_BATCH_S:60,
-      ENABLE_BLE:1,ENABLE_LTE:1,ENABLE_SD:0}[r[0]];
+      LOAD_END_FRAC:0.1,
+      ENABLE_BASELINE:1,BASELINE_INT_MIN:30,BASELINE_DUR_S:5,
+      ENABLE_BLE:1,ENABLE_LTE:1,ACCEL_AXIS_MASK:0,HEALTH_CHECK_S:60,
+      TRACE_ENABLE:1,TRACE_PERIOD_MS:1000,
+      FAT_STRESS_PER_KN:0,FAT_DETAIL_MPA:80,FAT_SLOPE_M:3,FAT_CUTOFF_MPA:29}[r[0]];
     if (d !== undefined) { setCfgField(r[0], d); mirrorToPanels(r[0], d); }
   });
 
@@ -2867,7 +4272,7 @@ function demoTick() {
 }
 
 if (!navigator.bluetooth) $('compat').hidden = false;
-chartShow('base'); paintMode(1); drawHistogram(); recalcCell();
+chartShow('base'); paintMode(1); drawHistogram(); recalcCell(); paintOutput();
 log('Ready. Connect to a node, or press Demo to explore the console.');
 </script>
 </body>
