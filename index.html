@@ -1364,6 +1364,20 @@ const Link = (() => {
   let device = null, char = null, rxBuf = '';
   let want = false;                 /* the operator's intent, not the state  */
   let reconnectTimer = null, backoff = 1000;
+  /*
+   * How many times the console re-connects a link that dropped on its own.
+   *
+   * Three attempts over about seven seconds covers what this is for: a node
+   * that drops the link for the ninety seconds of a capture and upload, and
+   * comes back by itself. It does NOT cover a node that has been powered off,
+   * carried out of range or reset -- and retrying that one for ever is worse
+   * than useless, because the browser holds the radio busy, the log fills with
+   * failures, and the operator cannot tell a node that is coming back from one
+   * that is gone. After three, the console stops and says so; Connect is one
+   * press away.
+   */
+  const RECONNECT_MAX = 3;
+  let reconnectTries = 0;
   let retryTimer = null;
 
   const queue = [];
@@ -1455,23 +1469,31 @@ const Link = (() => {
     if (key === 'UPLOAD_DONE') nodeWorking = false;
     if (key === 'ADXL_REARM' || (key === 'MODE' && val.startsWith('0,'))) nodeWorking = false;
     if (!inflight) return;
+    /*
+     * The node took the settings command and will apply it when it is idle.
+     * That is a completed command as far as the console is concerned: there is
+     * nothing to resend, and the node says APPLYING= when it runs.
+     */
+    if (key === 'QUEUED') {
+      log('Held by the node until the event finishes: ' + val.split(',')[0]);
+      finish(inflight, null);
+      return;
+    }
+    /*
+     * Busy is an answer, not a dropped command.
+     *
+     * This used to re-queue and resend every three seconds for up to ten
+     * minutes, which filled the log with refusals and did not make the node any
+     * less busy. The node now holds settings writes itself and answers QUEUED,
+     * so a refusal that reaches here is a command that genuinely needs the
+     * hardware. Report it once, with how long the operation has left, and let
+     * the operator decide.
+     */
     if (key === 'ERR' && (val === 'BUSY' || val.startsWith('BUSY,'))) {
-      const item = inflight;
-      if (Date.now() >= item.deadline) {
-        finish(item, new LinkError('Device stayed busy; command was not applied: ' + item.cmd));
-        return;
-      }
-      clearTimeout(item.timer);
-      inflight = null;
-      if (queue.some(q => q.cmd === 'SET_MODE=0') && !/^(GET_|STATUS$)/.test(item.cmd)) {
-        item.reject(new LinkError('Cancelled pending command to enter Setup: ' + item.cmd));
-        pump();
-        return;
-      }
-      item.retryAt = Date.now() + 3000;
-      const stop = queue.findIndex(q => q.cmd === 'SET_MODE=0' || q.cmd === 'PROFILE=STOP');
-      queue.splice(stop < 0 ? 0 : stop + 1, 0, item);
-      pump();
+      const eta = /eta_s=(\d+)/.exec(val);
+      const wait = (eta && +eta[1] > 0) ? ' for up to ' + eta[1] + ' s' : '';
+      finish(inflight, new LinkError('Node is busy' + wait + '; ' + inflight.cmd
+        + ' was not run. Try again when the event finishes, or use Setup to stop it.'));
       return;
     }
     if (!inflight.done) return;
@@ -1619,17 +1641,30 @@ const Link = (() => {
      *
      * Backs off to 8 s so a node that is genuinely gone is not hammered.
      */
-    log('Link dropped — reconnecting in ' + (backoff / 1000) + ' s', 'l-err');
+    if (reconnectTries >= RECONNECT_MAX) {
+      want = false;
+      reconnectTries = 0;
+      backoff = 1000;
+      log('Link dropped and did not come back after ' + RECONNECT_MAX
+          + ' attempts — press Connect when the node is powered and in range.', 'l-err');
+      return;
+    }
+
+    reconnectTries++;
+    log('Link dropped — reconnecting in ' + (backoff / 1000) + ' s (attempt '
+        + reconnectTries + ' of ' + RECONNECT_MAX + ')', 'l-err');
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(async () => {
       if (!want || !device) return;
       try {
         await device.gatt.connect();
         await attach();
+        reconnectTries = 0;
+        backoff = 1000;
         log('Reconnected to ' + (device.name || 'device'));
         await refreshAll().catch(e => log('Connected; settings refresh incomplete: ' + e.message, 'l-err'));
       } catch (e) {
-        backoff = Math.min(backoff * 2, 8000);
+        backoff = Math.min(backoff * 2, 4000);
         onDisconnected();
       }
     }, backoff);
@@ -1645,6 +1680,10 @@ const Link = (() => {
           filters: [{ services: [SPP_SVC] }], optionalServices: [SPP_SVC] });
         device.addEventListener('gattserverdisconnected', onDisconnected);
         want = true;
+        /* A deliberate Connect starts the reconnect budget over: the previous
+         * node being gone says nothing about this one. */
+        reconnectTries = 0;
+        backoff = 1000;
         await device.gatt.connect();
         await attach();
         log('Connected to ' + (device.name || 'device'));
@@ -1658,6 +1697,8 @@ const Link = (() => {
     disconnect() {
       /* Intent first, so the disconnect handler does not immediately undo it. */
       want = false;
+      reconnectTries = 0;
+      backoff = 1000;
       clearTimeout(reconnectTimer);
       if (device && device.gatt.connected) device.gatt.disconnect();
     },
@@ -2052,11 +2093,12 @@ function showAdxlLine(key, val) {
 function updateBusyNotice(key, val) {
   const notice = $('busy-notice');
   if (key === 'ERR' && (val === 'BUSY' || val.startsWith('BUSY,'))) {
-    const message = 'Command waiting — ' + (val.slice(5) || 'device is completing a sensor or modem operation.') + ' The console will retry automatically; Setup can stop the operation.';
+    const message = 'Not run — ' + (val.slice(5) || 'the device is completing a sensor or modem operation.') + ' Nothing was resent; try again when it finishes, or use Setup to stop it.';
     if (notice.textContent !== message) log(message);
     notice.textContent = message;
     notice.hidden = false;
-  } else if (['UPLOAD_DONE', 'ADXL_REARM', 'PROFILE_DONE', 'OK', 'MODE'].includes(key)) {
+  } else if (['UPLOAD_DONE', 'ADXL_REARM', 'PROFILE_DONE', 'OK', 'MODE',
+              'QUEUED', 'APPLYING'].includes(key)) {
     notice.hidden = true;
   }
 }
