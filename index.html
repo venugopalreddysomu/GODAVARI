@@ -111,6 +111,9 @@ section[role=tabpanel][hidden]{display:none}
 .lv-chart svg{display:block;width:100%;height:96px}
 .lv-chart .ln{fill:none;stroke:var(--series-1);stroke-width:1.8;vector-effect:non-scaling-stroke}
 .lv-chart .mean{stroke:var(--warn);stroke-width:1;stroke-dasharray:4 3;vector-effect:non-scaling-stroke}
+.lv-chart .thr{stroke:var(--crit);stroke-width:1.2;vector-effect:non-scaling-stroke}
+.lv-chart .bar{fill:var(--text-secondary);opacity:.55}
+.lv-chart .bar-over{fill:var(--good)}
 .lv-axis{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text-muted);
   font-family:ui-monospace,Menlo,Consolas,monospace}
 .lv-h{font-size:14px;margin:18px 0 8px}
@@ -208,7 +211,7 @@ ol.steps b{color:var(--text-primary)}
   <button role="tab" data-tab="t-dash"  aria-selected="true">Dashboard</button>
   <button role="tab" data-tab="t-comm"  aria-selected="false">Commissioning</button>
   <button role="tab" data-tab="t-trig"  aria-selected="false">Trigger</button>
-  <button role="tab" data-tab="t-adxl-test" aria-selected="false">ADXL test</button>
+  <button role="tab" data-tab="t-adxl-test" aria-selected="false">Accelerometer</button>
   <button role="tab" data-tab="t-data"  aria-selected="false">Data</button>
   <button role="tab" data-tab="t-life"  aria-selected="false">Lifecycle</button>
   <button role="tab" data-tab="t-cloud" aria-selected="false">Cloud</button>
@@ -219,37 +222,87 @@ ol.steps b{color:var(--text-primary)}
 
 <!-- ══════════════════════════ DASHBOARD ══════════════════════════ -->
 <section role="tabpanel" id="t-adxl-test" hidden>
-  <div class="card wide">
-    <h2>ADXL trigger test</h2>
-    <p>Start, tap the fixture, and check the result. Setup test only — no load capture or upload.</p>
+  <div class="card wide" style="margin-bottom:13px">
+    <h2>Live accelerometer</h2>
+    <p>Peak of <code>MAX(|axis &minus; reference|)</code> every 200&nbsp;ms &mdash; the same
+      quantity the thresholds are in, so a passing train can be read straight
+      against the line it has to cross.</p>
     <div class="row">
-      <button id="btn-adxl-start" class="primary">Start validation in Setup</button>
-      <button id="btn-adxl-status">Read interrupt status</button>
-      <button id="btn-adxl-clear">Clear &amp; rearm now</button>
-      <button id="btn-adxl-stop">Stop validation &amp; disarm</button>
-      <button id="btn-adxl-export">Export test log</button>
+      <button id="btn-ax-live" class="primary">Start live</button>
+      <button id="btn-ax-read">Read thresholds</button>
+      <button id="btn-ax-csv">Export CSV</button>
+      <button id="btn-ax-clear">Clear</button>
     </div>
-    <div class="notice" id="ax-verdict" role="status">Not tested. Start validation, then apply a brief tap.</div>
     <div class="tiles">
-      <div class="tile"><div class="k">Trigger</div><div class="v" id="ax-trigger-simple">Waiting</div></div>
-      <div class="tile"><div class="k">Result</div><div class="v" id="ax-result-simple">—</div></div>
-      <div class="tile"><div class="k">Rearmed?</div><div class="v" id="ax-ready-simple">—</div></div>
+      <div class="tile">
+        <div class="k">Peak now</div>
+        <div class="v"><span id="ax-peak">&mdash;</span><span class="u">mg</span></div>
+        <div class="sub" id="ax-peak-sub">not streaming</div>
+      </div>
+      <div class="tile">
+        <div class="k">Highest seen</div>
+        <div class="v"><span id="ax-max">&mdash;</span><span class="u">mg</span></div>
+        <div class="sub" id="ax-max-sub">&mdash;</div>
+      </div>
+      <div class="tile">
+        <div class="k">Wake threshold</div>
+        <div class="v"><span id="ax-act">&mdash;</span><span class="u">mg</span></div>
+        <div class="sub">ACTIVITY_MG &mdash; the part&rsquo;s own</div>
+      </div>
+      <div class="tile">
+        <div class="k">Confirm threshold</div>
+        <div class="v"><span id="ax-conf">&mdash;</span><span class="u">mg</span></div>
+        <div class="sub" id="ax-conf-sub">CONFIRM_MG &mdash; stage 2</div>
+      </div>
+      <div class="tile">
+        <div class="k">Resting reference</div>
+        <div class="v"><span id="ax-ref">&mdash;</span><span class="u">mg</span></div>
+        <div class="sub" id="ax-ref-sub">should be about 1000</div>
+      </div>
+      <div class="tile">
+        <div class="k">Reference offset</div>
+        <div class="v"><span id="ax-off">&mdash;</span><span class="u">mg</span></div>
+        <div class="sub" id="ax-off-sub">how much of the peak is not motion</div>
+      </div>
     </div>
-    <pre id="ax-log" style="max-height:320px;overflow:auto;white-space:pre-wrap" aria-label="ADXL trigger results"></pre>
-    <details><summary>Technical details</summary>
+    <div class="lv-chart">
+      <svg id="ax-spark" viewBox="0 0 600 120" preserveAspectRatio="none" role="img"
+           aria-label="Peak deviation, last 60 seconds"></svg>
+    </div>
+    <div class="row" style="justify-content:space-between">
+      <span class="hint" id="ax-span">no readings yet</span>
+      <span class="hint">solid = wake threshold &middot; dashed = confirm threshold</span>
+    </div>
+    <div style="max-height:220px;overflow:auto;margin-top:9px">
+      <table id="ax-table">
+        <thead><tr><th>Time</th><th>Peak (mg)</th><th>X</th><th>Y</th><th>Z</th><th>n</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>Last wake decision</h2>
+    <p>Why the node accepted or discarded the interrupt, and every reading it
+      judged. One spike in a flat second is a gust; a run just under the line is
+      a train the threshold missed.</p>
+    <div class="notice" id="ax-verdict" role="status">No wake seen yet on this connection.</div>
     <div class="tiles">
-      <div class="tile"><div class="k">Phase</div><div class="v" id="ax-phase">—</div></div>
-      <div class="tile"><div class="k">INT1 / INT2</div><div class="v" id="ax-pins">—</div></div>
-      <div class="tile"><div class="k">AWAKE / armed</div><div class="v" id="ax-armed">—</div></div>
-      <div class="tile"><div class="k">GPIO edges / held</div><div class="v" id="ax-edges">—</div></div>
+      <div class="tile"><div class="k">Source</div><div class="v" id="ax-src" style="font-size:14px">&mdash;</div></div>
+      <div class="tile"><div class="k">Peak</div><div class="v"><span id="ax-cpeak">&mdash;</span><span class="u">mg</span></div></div>
+      <div class="tile"><div class="k">Qualifying</div><div class="v" id="ax-over" style="font-size:14px">&mdash;</div></div>
+      <div class="tile"><div class="k">Rearmed</div><div class="v" id="ax-ready" style="font-size:14px">&mdash;</div></div>
     </div>
-    <div class="kv"><span class="k">Activity / inactivity thresholds</span><span class="v" id="ax-thresholds">—</span></div>
-    <div class="kv"><span class="k">Confirmation: peak / qualifying samples</span><span class="v" id="ax-confirm">—</span></div>
-    <div class="kv"><span class="k">Last rearm</span><span class="v" id="ax-rearm">—</span></div>
-    <div class="kv"><span class="k">ADC / modem power</span><span class="v" id="ax-power">—</span></div>
-    <div class="kv"><span class="k">Next physical interrupt after clear</span><span class="v" id="ax-next">Not tested</span></div>
-    <pre id="ax-raw-log" style="max-height:320px;overflow:auto;white-space:pre-wrap" aria-label="Raw ADXL diagnostics"></pre>
-    </details>
+    <div class="lv-chart" style="margin-top:9px">
+      <svg id="ax-devs" viewBox="0 0 600 96" preserveAspectRatio="none" role="img"
+           aria-label="Deviations judged by the last confirmation"></svg>
+    </div>
+    <div class="row" style="justify-content:space-between">
+      <span class="hint" id="ax-devs-span">no confirmation readings yet</span>
+      <button class="sm" id="btn-ax-devs-csv">Export readings</button>
+    </div>
+    <pre id="ax-log" style="max-height:240px;overflow:auto;white-space:pre-wrap;margin-top:9px"
+         aria-label="Accelerometer event log"></pre>
   </div>
 </section>
 
@@ -479,13 +532,24 @@ ol.steps b{color:var(--text-primary)}
         <div class="kv"><span class="k">Span factor</span><span class="v" id="k-span">&mdash;</span></div>
         <div class="kv"><span class="k">Live reading</span><span class="v" id="k-live">&mdash;</span></div>
         <div class="row" style="margin-top:12px">
-          <button class="sm" id="btn-tare">Tare</button>
-          <input type="number" id="k-known" step="any" placeholder="known kN"
-                 style="width:110px">
-          <button class="sm primary" id="btn-span">Set span</button>
+          <button class="sm" id="btn-tare">Tare at zero</button>
           <button class="sm danger" id="btn-calclr">Clear</button>
         </div>
-        <div class="sub" style="margin-top:8px">Watch a load settle in <b>5 &middot; Live reading</b> below.</div>
+        <div class="row" style="margin-top:8px">
+          <input type="number" id="k-known" step="any" placeholder="known kN"
+                 style="width:110px">
+          <button class="sm" id="btn-span">Set span from kN</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <input type="number" id="k-knownmv" step="any" placeholder="known mV/V"
+                 style="width:110px">
+          <button class="sm primary" id="btn-spanmv">Set span from mV/V</button>
+        </div>
+        <div class="sub" style="margin-top:8px">Tare with the simulator at
+          <b>0 mV/V</b>, then apply a known output and set the span. Either box
+          does the same calibration &mdash; mV/V is the one a load cell
+          simulator is set in. Watch it settle in <b>5 &middot; Live
+          reading</b> below.</div>
         <div class="sub" id="cal-note" style="margin-top:8px"></div>
       </div>
     </div>
@@ -676,9 +740,19 @@ ol.steps b{color:var(--text-primary)}
      <h2>Step 3 &mdash; Apply the threshold</h2>
      <div class="kv"><span class="k">Suggested</span><span class="v" id="p-suggest">&mdash;</span></div>
      <div class="cfg-row">
-       <label for="w-act">Activity threshold</label>
+       <label for="w-act">Wake threshold</label>
        <input id="w-act" type="number" step="0.1" min="10" max="2000">
-       <span class="rng">mg deviation &middot; 10&ndash;2000</span>
+       <span class="rng">mg deviation &middot; the part judges one sample</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-holdoff">Re-arm holdoff</label>
+       <input id="w-holdoff" type="number" step="1" min="0" max="60">
+       <span class="rng">s &middot; quiet time after an upload before re-arming</span>
+     </div>
+     <div class="cfg-row">
+       <label for="w-conf">Confirm threshold</label>
+       <input id="w-conf" type="number" step="1" min="0" max="2000">
+       <span class="rng">mg &middot; the MCU re-check; 0 = use the wake threshold</span>
      </div>
      <div class="cfg-row">
        <label for="w-inact">Quiet threshold</label>
@@ -1405,8 +1479,8 @@ const Link = (() => {
     const readEnd = { STATUS: 'HEALTH', GET_LIVE: 'TEMP_C', GET_DIAG: 'WDT_RESETS',
       GET_MODE: 'MODE', GET_TIME: 'TIME_SRC', GET_CLOUD_STATUS: 'PROV_DIRTY', GET_TB_TOKEN: 'TB_TOKEN_SET' };
     if (readEnd[cmd]) return { key: readEnd[cmd], ms: 6000 };
-    if (cmd.startsWith('ADXL_TEST=')) return { ms: 8000,
-      match: (k, v) => k === 'ADXL_TEST_END' || (k === 'ERR' && v.startsWith('ADXL_TEST')) };
+    if (cmd.startsWith('ACC_STREAM=')) return { ms: 4000,
+      match: (k, v) => k === 'ACC_STREAM' || (k === 'ERR' && !!v) };
     if (cmd === 'GET_CONFIG')  return { key: 'CFG_END',     ms: 20000 };
     if (cmd === 'GET_FATIGUE') return { key: 'FATIGUE_END', ms: 20000 };
     if (cmd === 'GET_TUNE')    return { key: 'TUNE_END',    ms: 20000 };
@@ -1760,12 +1834,16 @@ const CFG = [
   'The bridge output that means zero strain, subtracted before converting. Used only in Microstrain mode.'],
 
  ['Trigger', null, null, null, null, null],
- ['ACTIVITY_MG','Activity threshold','num',10,2000,'mg',
-  'How far the deck must move away from its stored resting orientation before the ADXL367 wakes the MCU. A DEVIATION, not an absolute acceleration: gravity and bracket tilt are removed in hardware by referenced mode, so this is not "a tenth of a g". Choose it by profiling, not by guessing.'],
+ ['ACTIVITY_MG','Wake threshold','num',10,2000,'mg',
+  'How far the deck must move away from its resting orientation before the ADXL367 wakes the MCU. A DEVIATION, not an absolute acceleration: gravity and bracket tilt are removed in hardware by referenced mode, so this is not "a tenth of a g". The part judges ONE SAMPLE at a time with no memory, so this has to sit above the site\'s single-sample noise or the MCU is woken all night. Choose it by profiling, not by guessing.'],
+ ['REARM_HOLDOFF_S','Re-arm holdoff','num',0,60,'s',
+  'How long the node waits after switching the modem off before arming the accelerometer again. Powering a cellular modem down puts a step through the supply and the ground plane, and a detector armed into that step reports it as motion — a wake caused by the upload of the previous wake, which is a loop that runs until the battery is flat. Shorter means a train arriving just after an upload is more likely to be caught; 0 arms immediately and is only correct on hardware where the modem does not disturb the rail.'],
+ ['CONFIRM_MG','Confirm threshold','num',0,2000,'mg',
+  'The threshold the MCU re-check uses, which is allowed to be LOWER than the wake threshold. 0 means "use the wake threshold", which is what every node did before this setting existed. Two numbers because the two stages have different evidence: the part compares one sample at a time at 180 nA and has to clear the noise, while the re-check has a second of readings and counts how many crossed — so a dozen readings at 40 mg is a train however clearly 40 mg is not a wake-worthy spike. One number doing both jobs sits above what recognises a real train, which is how a node rejects passages it was right to wake for.'],
  ['INACTIVITY_MG','Quiet threshold','num',5,2000,'mg',
   'Deviation below which the bridge counts as quiet again. Must sit below the activity threshold, or the same vibration both starts and ends a train and the part never sleeps.'],
  ['ACTIVITY_TIME_MS','Sustained motion','num',0,5000,'ms',
-  'How long motion must stay above the threshold before it counts. Filters single knocks. NOTE: this filter applies in measurement mode only — in the low-power wake-up mode the part triggers on a single sample, which is why the MCU re-checks after a wake.'],
+  'How long motion must stay above the confirm threshold before it counts as a train. Applies to the MCU re-check ONLY: the part\'s own TIME_ACT is deliberately programmed to zero, because it counts CONSECUTIVE samples and vibration crosses its own reference twice a cycle — asking for three in a row is asking for a deck that never passes through its resting position, which rejects real trains. The re-check counts readings in a window instead, and they need not be adjacent.'],
  ['INACTIVITY_MS','Quiet time to end','num',200,10000,'ms',
   'How long the deck must stay quiet before the part decides the train has gone and drops back to its low-power state.'],
  ['ACCEL_AXIS_MASK','Detect on axes','sel',0,0,'',
@@ -1999,94 +2077,280 @@ let msMode = "";
 let traceRows = [];
 let traceMeta = {};
 
-const adxlTest = { lines: [], raw: [], waitingForEdge: false, trigger: 0, enabled: null };
-function adxlSimple(message) {
-  adxlTest.lines.push(`[${new Date().toLocaleTimeString()}] ${message}`);
-  if (adxlTest.lines.length > 500) adxlTest.lines.shift();
-  $('ax-log').textContent = adxlTest.lines.join('\n');
+/*
+ * The accelerometer view.
+ *
+ * Everything here is driven by lines the node sends unprompted, so the panel
+ * fills itself whether the operator is watching a live stream or waiting at the
+ * lineside for a train. The old ADXL_TEST buttons are gone: those commands only
+ * exist when SS_ENABLE_ADXL_VALIDATION is compiled in, which it is not in any
+ * shipped build, so every one of them answered "validation disabled in this
+ * build" and the tab's whole top half was dead controls.
+ */
+const AX_WINDOW_MS = 60000;
+const ax = {
+  live: [],          /* {t, peak, x, y, z, n} for the last AX_WINDOW_MS */
+  max: 0, maxAt: 0,
+  on: false,
+  act: NaN, conf: NaN, ref: NaN,
+  devs: [], devsPass: null, devsThr: NaN,
+  refv: null,        /* the stored reference, per axis */
+  log: [], wakes: 0,
+};
+
+function axLog(message) {
+  ax.log.push(`[${new Date().toLocaleTimeString()}] ${message}`);
+  if (ax.log.length > 400) ax.log.shift();
+  const pre = $('ax-log');
+  pre.textContent = ax.log.join('\n');
+  pre.scrollTop = pre.scrollHeight;
 }
+
+const axNum = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : NaN; };
+
+/*
+ * The live trace, with both thresholds drawn across it.
+ *
+ * The y axis always includes zero and always includes whichever threshold is
+ * in force, even when the deck is quiet: a trace autoscaled to a few milli-g of
+ * noise looks exactly like a trace of a train, and the entire point of this
+ * chart is to show how far the readings are from the line they must cross.
+ */
+function axDrawLive() {
+  const svg = $('ax-spark');
+  const pts = ax.live;
+  if (pts.length < 2) { svg.innerHTML = ''; return; }
+
+  let hi = 0;
+  for (const p of pts) hi = Math.max(hi, p.peak);
+  for (const t of [ax.act, ax.conf]) if (Number.isFinite(t)) hi = Math.max(hi, t);
+  hi = hi * 1.15 || 1;
+
+  const t1 = pts[pts.length - 1].t, t0 = t1 - AX_WINDOW_MS;
+  const X = t => ((t - t0) / AX_WINDOW_MS) * 600;
+  const Y = v => 120 - (v / hi) * 120;
+
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.t).toFixed(1)},${Y(p.peak).toFixed(2)}`).join('');
+  let lines = '';
+  if (Number.isFinite(ax.act)) {
+    lines += `<line class="thr" x1="0" x2="600" y1="${Y(ax.act).toFixed(2)}" y2="${Y(ax.act).toFixed(2)}"></line>`;
+  }
+  if (Number.isFinite(ax.conf) && ax.conf !== ax.act) {
+    lines += `<line class="mean" x1="0" x2="600" y1="${Y(ax.conf).toFixed(2)}" y2="${Y(ax.conf).toFixed(2)}"></line>`;
+  }
+  svg.innerHTML = lines + `<path class="ln" d="${d}"></path>`;
+
+  const span = Math.round((t1 - pts[0].t) / 1000);
+  setTxt('ax-span', `last ${span} s · ${pts.length} windows · full scale ${hi.toFixed(0)} mg`);
+}
+
+function axRow(p) {
+  const tb = $('ax-table').tBodies[0];
+  const tr = document.createElement('tr');
+  const cross = Number.isFinite(ax.conf) && p.peak >= ax.conf;
+  tr.innerHTML = `<td>${new Date(p.t).toLocaleTimeString()}</td>`
+    + `<td style="color:${cross ? 'var(--good)' : 'inherit'}">${p.peak.toFixed(1)}</td>`
+    + `<td>${p.x.toFixed(1)}</td><td>${p.y.toFixed(1)}</td><td>${p.z.toFixed(1)}</td>`
+    + `<td>${p.n}</td>`;
+  tb.insertBefore(tr, tb.firstChild);
+  while (tb.rows.length > 300) tb.deleteRow(tb.rows.length - 1);
+}
+
+/* The deviations the last confirmation judged, as bars against its threshold. */
+function axDrawDevs() {
+  const svg = $('ax-devs');
+  if (!ax.devs.length) { svg.innerHTML = ''; setTxt('ax-devs-span', 'no confirmation readings yet'); return; }
+  const thr = Number.isFinite(ax.devsThr) ? ax.devsThr : 0;
+  let hi = Math.max(thr, ...ax.devs) * 1.15 || 1;
+  const w = 600 / ax.devs.length;
+  const bars = ax.devs.map((v, i) => {
+    const h = (v / hi) * 96;
+    const over = v >= thr && thr > 0;
+    return `<rect x="${(i * w).toFixed(2)}" y="${(96 - h).toFixed(2)}" `
+         + `width="${Math.max(w - 0.6, 0.6).toFixed(2)}" height="${h.toFixed(2)}" `
+         + `class="${over ? 'bar-over' : 'bar'}"></rect>`;
+  }).join('');
+  const line = thr > 0
+    ? `<line class="thr" x1="0" x2="600" y1="${(96 - (thr / hi) * 96).toFixed(2)}" y2="${(96 - (thr / hi) * 96).toFixed(2)}"></line>`
+    : '';
+  svg.innerHTML = bars + line;
+  const over = ax.devs.filter(v => v >= thr).length;
+  setTxt('ax-devs-span', `${ax.devs.length} readings · ${over} at or above ${thr.toFixed(0)} mg`
+       + (ax.devsPass === false ? ' · discarded' : ax.devsPass === true ? ' · accepted' : ''));
+}
+
+function axSetThresholds() {
+  setTxt('ax-act', Number.isFinite(ax.act) ? ax.act.toFixed(0) : '—');
+  setTxt('ax-conf', Number.isFinite(ax.conf) ? ax.conf.toFixed(0) : '—');
+  axDrawLive();
+}
+
 function showAdxlLine(key, val) {
   const fields = Object.fromEntries(val.split(',').filter(x => x.includes('=')).map(x => {
     const at = x.indexOf('='); return [x.slice(0, at), x.slice(at + 1)];
   }));
-  adxlTest.raw.push(`[${new Date().toISOString()}] ${key}=${val}`);
-  if (adxlTest.raw.length > 500) adxlTest.raw.shift();
-  $('ax-raw-log').textContent = adxlTest.raw.join('\n');
-  if (key === 'WAKE_DETAIL') {
-    const physical = val.startsWith('IRQ,');
-    adxlTest.trigger++;
-    const title = `#${adxlTest.trigger} ${physical ? 'Detected' : 'Software recovery'}`;
-    setTxt('ax-trigger-simple', title);
-    setTxt('ax-result-simple', 'Checking…');
-    setTxt('ax-ready-simple', 'Checking…');
-    adxlSimple(physical ? `Trigger #${adxlTest.trigger} detected` : `Wake #${adxlTest.trigger}: software recovery — physical interrupt not verified`);
-  }
-  if (key === 'ADXL_TEST') {
-    if (adxlTest.enabled !== fields.enabled) {
-      adxlTest.enabled = fields.enabled;
-      adxlSimple(fields.enabled === '1' ? 'Test running' : 'Test stopped');
-      if (fields.enabled === '0') {
-        setTxt('ax-ready-simple', 'No — stopped');
-        setTxt('ax-verdict', 'Test stopped');
-        adxlTest.waitingForEdge = false;
-      }
-    }
-    setTxt('ax-phase', fields.phase);
-    setTxt('ax-edges', `${fields.edges} / ${fields.held}`);
-  }
-  if (key === 'ADXL_HW') {
-    setTxt('ax-pins', `${fields.int1} / ${fields.int2}`);
-    setTxt('ax-armed', `${fields.awake} / ${fields.armed}`);
-    setTxt('ax-power', `${fields.adc === '1' ? 'on' : 'off'} / ${fields.modem === '1' ? 'on' : 'off'}`);
-  }
-  if (key === 'ADXL_CFG' || key === 'ADXL_CONFIRM') {
-    setTxt('ax-thresholds', `${fields.activity_mg} / ${fields.inactivity_mg} mg`);
-  }
-  if (key === 'ADXL_CONFIRM') {
-    const result = fields.checked !== '1' ? 'Not verified' : fields.pass === '1' ? 'Valid trigger' : 'False trigger';
-    setTxt('ax-result-simple', result);
-    adxlSimple(`${result}${fields.checked === '1' ? ' — ' + fields.peak_mg + ' mg' : ' — confirmation unavailable'}`);
-    setTxt('ax-confirm', `${fields.peak_mg} mg; ${fields.over}/${fields.need} qualifying, ${fields.samples} fresh samples`);
-    setTxt('ax-verdict', fields.checked !== '1' ? (fields.pass === '1' ? 'Confirmation disabled; hardware wake accepted.' : 'Not verified — no capture.') :
-      (fields.pass === '1' ? 'Valid trigger — rearming.' : 'False trigger — rearming.'));
-  }
-  if (key === 'ADXL_REARM') {
-    setTxt('ax-ready-simple', fields.ready === '1' ? 'Yes' : 'No — check detector');
-    adxlSimple(fields.ready === '1' ? 'Rearmed — ready for next trigger' : 'NOT rearmed/ready — check detector');
-    adxlTest.waitingForEdge = fields.ready === '1';
-    setTxt('ax-rearm', `${fields.reason}: ${fields.ready === '1' ? 'ready' : 'not quiet/ready'} after ${fields.ms} ms`);
-    setTxt('ax-pins', fields.int1 + ' / —');
-    setTxt('ax-armed', `${fields.awake} / ${fields.armed}`);
-    setTxt('ax-phase', fields.ready === '1' ? 'ARMED_WAIT' : 'CHECK DETECTOR');
-    setTxt('ax-verdict', fields.ready === '1' ? 'Rearmed and low. Apply the next physical tap.' :
-      'Not ready/quiet: inspect the pin, sensor response and thresholds.');
-    if (adxlTest.waitingForEdge) setTxt('ax-next', 'Waiting for the next physical IRQ');
-  }
-  if (key === 'WAKE_DETAIL' && val.startsWith('IRQ,') && adxlTest.waitingForEdge) {
-    adxlTest.waitingForEdge = false;
-    setTxt('ax-next', 'PASS — a new GPIO interrupt arrived after rearm');
-  }
-  if (key === 'ACTIVITY' && val.startsWith('1,')) setTxt('ax-phase', 'CAPTURE');
-  if (key === 'CLOUD') setTxt('ax-phase', 'UPLOAD');
-  if (key === 'ADXL_FAULT') adxlSimple('Detector fault — open Technical details');
-  if (key === 'ADXL_HOLDOFF') {
-    setTxt('ax-ready-simple', 'Waiting 5 seconds');
-    setTxt('ax-verdict', 'Modem off — allowing 5 seconds to settle before rearming');
-    adxlTest.waitingForEdge = false;
-    adxlSimple('Modem off — waiting 5 seconds before rearm');
-  }
-  if (key === 'ADXL_CONFIRM_NOTE') adxlSimple(val);
-  if (key === 'ADXL_WATCH') {
-    const messages = {
-      WAITING_FOR_MOTION: 'Waiting — sensor has not signalled new motion',
-      SENSOR_ACTIVE_PIN_LOW: 'Motion detected by sensor, but interrupt pin stays LOW — check INT1 wiring',
-      PIN_HIGH_NO_IRQ: 'Interrupt pin HIGH, but no MCU interrupt received — check GPIO interrupt setup',
-      SENSOR_READ_ERROR: 'Cannot read the ADXL sensor',
-      DETECTOR_NOT_ARMED: 'Detector is not armed — restart the test'
+
+  if (key === 'ACC_LIVE') {
+    const p = {
+      t: Date.now(),
+      peak: axNum(fields.peak_mg),
+      x: axNum(fields.x_mg), y: axNum(fields.y_mg), z: axNum(fields.z_mg),
+      n: parseInt(fields.n, 10) || 0,
     };
-    const message = messages[val] || val;
-    setTxt('ax-verdict', message);
-    adxlSimple(message);
+    if (!Number.isFinite(p.peak)) return;
+    ax.live.push(p);
+    while (ax.live.length && (p.t - ax.live[0].t) > AX_WINDOW_MS) ax.live.shift();
+    if (p.peak > ax.max) { ax.max = p.peak; ax.maxAt = p.t; }
+    setTxt('ax-peak', p.peak.toFixed(1),
+           Number.isFinite(ax.conf) && p.peak >= ax.conf ? 'var(--good)' : '');
+    setTxt('ax-peak-sub', `${p.n} samples in ${fields.ms || '?'} ms`);
+    setTxt('ax-max', ax.max.toFixed(1));
+    setTxt('ax-max-sub', `at ${new Date(ax.maxAt).toLocaleTimeString()}`);
+    /* The magnitude is the honest check on the reference: a node at rest reads
+     * 1 g whatever angle its bracket is at, so anything far from 1000 means the
+     * stored reference no longer describes where this node is sitting - and
+     * every deviation above is then measured from the wrong origin. */
+    /*
+     * How much of peak_mg is a stale reference rather than a moving deck.
+     *
+     * peak_mg is MAX(|axis - stored reference|), so a reference that no longer
+     * describes where the node rests adds a constant to every reading. That is
+     * the whole reason a live view can read 9 mg while a baseline profile of
+     * the same still deck reads 5: the profile learns its own reference at the
+     * start of the run and measures from THAT, so it sees only noise, while the
+     * live view measures from what is stored and sees noise plus the drift.
+     *
+     * Shown separately so the two are never confused. Subtract it from peak_mg
+     * and what remains is what actually moved.
+     */
+    if (ax.refv && Number.isFinite(p.x)) {
+      const off = Math.max(Math.abs(p.x - ax.refv[0]),
+                           Math.abs(p.y - ax.refv[1]),
+                           Math.abs(p.z - ax.refv[2]));
+      const big = Number.isFinite(ax.conf) && off > ax.conf * 0.3;
+      setTxt('ax-off', off.toFixed(1), big ? 'var(--warn)' : '');
+      setTxt('ax-off-sub', big
+        ? 'a third of the threshold is static — re-run PROFILE=BASELINE'
+        : 'how much of the peak is not motion', big ? 'var(--warn)' : '');
+    }
+
+    const mag = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+    if (Number.isFinite(mag)) {
+      const ok = mag > 700 && mag < 1400;
+      setTxt('ax-ref', mag.toFixed(0), ok ? 'var(--good)' : 'var(--crit)');
+      setTxt('ax-ref-sub', ok ? 'plausible at rest' : 'not 1 g — re-run PROFILE=BASELINE',
+             ok ? '' : 'var(--crit)');
+    }
+    axRow(p);
+    axDrawLive();
+    return;
+  }
+
+  if (key === 'ACC_STREAM') {
+    ax.on = val.trim() === '1';
+    $('btn-ax-live').textContent = ax.on ? 'Stop live' : 'Start live';
+    $('btn-ax-live').classList.toggle('primary', !ax.on);
+    setTxt('ax-peak-sub', ax.on ? 'streaming' : 'not streaming');
+    axLog(ax.on ? 'Live stream started' : 'Live stream stopped');
+    return;
+  }
+
+  if (key === 'WAKE_DETAIL') {
+    ax.wakes++;
+    const physical = val.startsWith('IRQ');
+    setTxt('ax-src', physical ? 'Hardware IRQ' : 'Level check');
+    setTxt('ax-verdict', 'Wake detected — confirming…');
+    setTxt('ax-ready', '—');
+    ax.devs = []; ax.devsPass = null;
+    axDrawDevs();
+    axLog(`Wake #${ax.wakes}: ${physical ? 'hardware interrupt' : 'level check (the pin was still asserted)'}`);
+    return;
+  }
+
+  if (key === 'ADXL_CONFIRM') {
+    const checked = fields.checked === '1', pass = fields.pass === '1';
+    ax.devsThr = axNum(fields.activity_mg);
+    ax.devsPass = checked ? pass : null;
+    if (Number.isFinite(ax.devsThr)) { ax.conf = ax.devsThr; axSetThresholds(); }
+    setTxt('ax-cpeak', fields.peak_mg || '—');
+    setTxt('ax-over', checked ? `${fields.over}/${fields.need} of ${fields.samples}` : 'not checked');
+    setTxt('ax-verdict',
+      !checked ? 'Confirmation did not run — the hardware wake was taken on trust.'
+      : pass ? `Accepted at ${fields.peak_mg} mg — capturing.`
+             : `Discarded at ${fields.peak_mg} mg — ${fields.over} of ${fields.samples} readings reached ${fields.activity_mg} mg, ${fields.need} were needed.`,
+      checked && !pass ? 'var(--warn)' : '');
+    axLog(!checked ? 'Confirmation unavailable — wake accepted unchecked'
+        : pass ? `Accepted: ${fields.peak_mg} mg, ${fields.over}/${fields.need} qualifying`
+               : `Discarded: ${fields.peak_mg} mg, only ${fields.over}/${fields.need} qualifying`);
+    axDrawDevs();
+    return;
+  }
+
+  if (key === 'ADXL_DEVS') {
+    /* "index,v,v,v..." — index 0 starts a fresh trail, so a wake whose trail
+     * spans several lines assembles in order without needing a terminator. */
+    const parts = val.split(',');
+    const at = parseInt(parts[0], 10);
+    if (at === 0) ax.devs = [];
+    for (const v of parts.slice(1)) {
+      const n = parseInt(v, 10);
+      if (Number.isFinite(n)) ax.devs.push(n);
+    }
+    axDrawDevs();
+    return;
+  }
+
+  if (key === 'ADXL_REARM') {
+    const ready = fields.ready === '1';
+    setTxt('ax-ready', ready ? 'Yes' : 'No — check detector', ready ? 'var(--good)' : 'var(--crit)');
+    axLog(ready ? `Rearmed after ${fields.reason} in ${fields.ms} ms`
+                : `NOT ready after ${fields.reason} (int1=${fields.int1}, awake=${fields.awake})`);
+    return;
+  }
+
+  if (key === 'ADXL_NOISE_FLOOR') {
+    axLog(`Noise floor ${fields.peak_mg} mg against INACT_MG ${fields.inactivity_mg} mg at ${fields.odr} Hz`);
+    return;
+  }
+  if (key === 'ADXL_ARM_CHECK') {
+    axLog(`Arm check ${fields.attempt}: ${fields.x_mg}, ${fields.y_mg}, ${fields.z_mg} mg`);
+    return;
+  }
+  if (key === 'ACC_LIVE_ERR') {
+    setTxt('ax-peak-sub', 'no conversions', 'var(--crit)');
+    axLog('Live stream: ' + val);
+    return;
+  }
+  if (key === 'ADXL_RESET')        { axLog('Detector reset: ' + val); return; }
+  if (key === 'ADXL_CONFIRM_NOTE') { axLog(val); return; }
+  if (key === 'ADXL_HOLDOFF')      { axLog('Modem off — settling before rearm'); return; }
+  if (key === 'ADXL_NOISE')        { axLog('Noisy wake line: ' + val); return; }
+  if (key === 'ACTIVITY' && val.startsWith('1,')) { axLog('Capture started'); return; }
+  if (key === 'EVENT')             { axLog('Capture ended: ' + val); return; }
+}
+
+/* GET_WAKE carries the thresholds and the stored reference; both are read from
+ * the same lines the Settings tab already asks for, so opening this tab after a
+ * refresh shows the lines without another round trip. */
+function axWakeField(key, val) {
+  if (key === 'ACT_MG')      { ax.act  = axNum(val); axSetThresholds(); }
+  if (key === 'CONFIRM_MG')  { ax.conf = axNum(val); axSetThresholds(); }
+  if (key === 'CONFIRM_MG_SET') {
+    setTxt('ax-conf-sub', val.trim() === '0' ? 'CONFIRM_MG — inherited from ACTIVITY_MG'
+                                             : 'CONFIRM_MG — set explicitly');
+  }
+  if (key === 'ACCEL_REF') {
+    const [x, y, z] = val.split(',').map(axNum);
+    ax.refv = [x, y, z];
+    const mag = Math.sqrt(x * x + y * y + z * z);
+    if (Number.isFinite(mag)) {
+      ax.ref = mag;
+      const ok = mag > 700 && mag < 1400;
+      setTxt('ax-ref', mag.toFixed(0), ok ? 'var(--good)' : 'var(--crit)');
+      setTxt('ax-ref-sub', ok ? 'stored reference, plausible at rest'
+                              : 'stored reference is not 1 g — re-run PROFILE=BASELINE',
+             ok ? '' : 'var(--crit)');
+    }
   }
 }
 
@@ -2107,9 +2371,11 @@ function handleLine(line) {
   if (eq < 0) return;
   const key = line.slice(0,eq), val = line.slice(eq+1);
   updateBusyNotice(key, val);
-  if (key.startsWith('ADXL_') || ['WAKE_DETAIL','ACTIVITY','CLOUD','EVENT','UPLOAD_DONE'].includes(key)) {
+  if (key.startsWith('ADXL_') || key.startsWith('ACC_')
+      || ['WAKE_DETAIL','ACTIVITY','CLOUD','EVENT','UPLOAD_DONE'].includes(key)) {
     showAdxlLine(key, val);
   }
+  axWakeField(key, val);
 
   const mf = key.match(/^FATIGUE\[(\d+)\]$/);
   if (mf) { const i=+mf[1]; if (i<32) fatBins[i] = num(val)||0; return; }
@@ -2252,6 +2518,11 @@ function handleLine(line) {
     case 'WAKE_SOURCE':
       setTxt('w-accel-state', 'ADXL367 (only trigger source)'); break;
     case 'ACT_MG':   $('w-act').value = val; break;
+    /* The STORED value, not the resolved one: showing the inherited number
+     * would make an empty setting look like an explicit one, and saving the
+     * form would then pin it. */
+    case 'CONFIRM_MG_SET': $('w-conf').value = val; break;
+    case 'REARM_HOLDOFF_S': $('w-holdoff').value = val; break;
     case 'INACT_MG': $('w-inact').value = val; break;
     case 'ACTIVITY_TIME_MS':  $('w-acttime').value = val; break;
     case 'INACTIVITY_MS':     $('w-inacttime').value = val; break;
@@ -3261,18 +3532,40 @@ $('capture-debug').onchange = async e => {
   }
   catch (err) { e.target.checked = !enabled; throw err; }
 };
-$('btn-adxl-start').onclick = async () => {
-  adxlTest.waitingForEdge = false;
-  await send('SET_MODE=0');
-  await send('ADXL_TEST=START');
+/*
+ * The live view runs in whatever mode the node is already in. It is explicitly
+ * NOT preceded by SET_MODE=0, unlike the test it replaces: the readings worth
+ * watching are the ones a train produces while the node is armed, and dropping
+ * to Setup to look at them disarms the detector that was going to catch it.
+ */
+$('btn-ax-live').onclick = () => send(ax.on ? 'ACC_STREAM=0' : 'ACC_STREAM=1');
+$('btn-ax-read').onclick = () => send('GET_WAKE');
+$('btn-ax-clear').onclick = () => {
+  ax.live = []; ax.max = 0; ax.log = []; ax.devs = []; ax.devsPass = null;
+  $('ax-table').tBodies[0].innerHTML = '';
+  $('ax-log').textContent = '';
+  $('ax-spark').innerHTML = ''; $('ax-devs').innerHTML = '';
+  ['ax-peak','ax-max','ax-cpeak','ax-over','ax-ready','ax-src','ax-off']
+    .forEach(id => setTxt(id, '—'));
+  setTxt('ax-span', 'no readings yet');
+  setTxt('ax-devs-span', 'no confirmation readings yet');
+  setTxt('ax-verdict', 'Cleared.');
 };
-$('btn-adxl-status').onclick = () => send('ADXL_TEST=STATUS');
-$('btn-adxl-clear').onclick = () => send('ADXL_TEST=CLEAR');
-$('btn-adxl-stop').onclick = () => send('ADXL_TEST=STOP');
-$('btn-adxl-export').onclick = () => {
-  const url = URL.createObjectURL(new Blob([adxlTest.lines.join('\n')], {type:'text/plain'}));
-  const a = document.createElement('a'); a.href = url; a.download = 'adxl-validation.txt';
-  a.click(); URL.revokeObjectURL(url);
+$('btn-ax-csv').onclick = () => {
+  const rows = [['time_iso','peak_mg','x_mg','y_mg','z_mg','samples']]
+    .concat(ax.live.map(p => [new Date(p.t).toISOString(), p.peak, p.x, p.y, p.z, p.n]));
+  const url = URL.createObjectURL(new Blob([rows.map(r => r.join(',')).join('\n')],
+                                           {type: 'text/csv'}));
+  const a = document.createElement('a'); a.href = url;
+  a.download = 'adxl-live.csv'; a.click(); URL.revokeObjectURL(url);
+};
+$('btn-ax-devs-csv').onclick = () => {
+  const rows = [['reading','deviation_mg','threshold_mg']]
+    .concat(ax.devs.map((v, i) => [i, v, Number.isFinite(ax.devsThr) ? ax.devsThr : '']));
+  const url = URL.createObjectURL(new Blob([rows.map(r => r.join(',')).join('\n')],
+                                           {type: 'text/csv'}));
+  const a = document.createElement('a'); a.href = url;
+  a.download = 'adxl-confirmation.csv'; a.click(); URL.revokeObjectURL(url);
 };
 /* Explicit disconnect clears the reconnect intent first, so the link layer does
  * not immediately put back what the operator just took down. */
@@ -3554,6 +3847,17 @@ $('btn-span').onclick  = () => {
   const v = parseFloat($('k-known').value);
   if (!(v > 0)) { $('cal-note').textContent = 'Enter the applied load in kN first.'; return; }
   send('CAL_SPAN='+v);
+};
+/* The node converts mV/V to kN against its own capacity and rated output, and
+ * echoes both, so the arithmetic that could go wrong is done where the
+ * configuration being used is visible. */
+$('btn-spanmv').onclick = () => {
+  const v = parseFloat($('k-knownmv').value);
+  if (!(v > 0)) {
+    $('cal-note').textContent = 'Enter the output the simulator is applying, in mV/V.';
+    return;
+  }
+  send('CAL_MVV='+v);
 };
 $('btn-calclr').onclick = () => send('CAL_CLEAR');
 /* Intent is tracked in a variable, never read back out of the button label:
@@ -3996,10 +4300,24 @@ $('btn-wake-save').onclick = async () => {
         + 'same vibration both starts and ends a train and the part never sleeps.');
     return;
   }
+  /*
+   * A confirm threshold ABOVE the wake threshold is accepted by the node but
+   * cannot do anything useful: stage 1 has already decided at the lower number,
+   * so stage 2 can only ever veto. Worth a word, not a refusal - a deployment
+   * that wants the re-check to be the strict one is entitled to say so.
+   */
+  const c = parseFloat($('w-conf').value || '0');
+  if (c > 0 && c > a && !confirm(
+      'The confirm threshold (' + c + ' mg) is above the wake threshold ('
+      + a + ' mg), so the re-check can only ever reject what woke the node. '
+      + 'That is usually the wrong way round. Save anyway?')) return;
+
   /* Quiet first: the node rejects a config where inactivity >= activity, and
    * writing activity down before inactivity would trip that check on the way. */
   await send('SET_CFG_INACTIVITY_MG=' + i);
   await send('SET_CFG_ACTIVITY_MG=' + a);
+  await send('SET_CFG_CONFIRM_MG='      + parseInt($('w-conf').value || '0', 10));
+  await send('SET_CFG_REARM_HOLDOFF_S=' + parseInt($('w-holdoff').value || '5', 10));
   await send('SET_CFG_ACTIVITY_TIME_MS=' + parseInt($('w-acttime').value, 10));
   await send('SET_CFG_INACTIVITY_MS='   + parseInt($('w-inacttime').value, 10));
   await send('SET_CFG_WAKE_CONFIRM_MS=' + parseInt($('w-confirm').value, 10));
