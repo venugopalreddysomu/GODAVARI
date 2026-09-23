@@ -1173,6 +1173,7 @@ ol.steps b{color:var(--text-primary)}
       <div class="kv"><span class="k">Last reading</span><span class="v" id="a-read">&mdash;</span></div>
       <div class="kv"><span class="k">Chip temperature</span><span class="v" id="a-temp">&mdash;</span></div>
       <div class="kv"><span class="k">Analog rail (AVDD / excitation)</span><span class="v" id="a-rail">&mdash;</span></div>
+      <div class="kv"><span class="k">Rail gate pin</span><span class="v" id="a-gate">&mdash;</span></div>
       <div class="row" style="margin-top:11px">
         <button class="sm primary" id="btn-ad-probe">Probe</button>
         <button class="sm" id="btn-ad-short" title="Channel 9 shorts the modulator input internally">Self-test</button>
@@ -1815,6 +1816,9 @@ const CFG = [
   'Continuously removes ADC offset and drift and gains about half a bit, but quadruples conversion and settling time. Off by default; use the internal zero-scale calibration instead during captures.'],
 
  ['Analog rail', null, null, null, null, null],
+ ['RAIL_GATE','Which pin powers AVDD','sel',0,0,'',
+  'Which pin switches the analog rail that feeds AVDD, REF+ and the bridge excitation \u2014 a property of the board in front of you, not a preference. <b>PC00</b> is the P-channel FET from the battery fitted in the 2026-09-19 rework: the rail is on when the gate is LOW, and it is unregulated, so the excitation sags as the cell discharges (mV/V, kN and microstrain are unaffected \u2014 only the microvolt display needs the number). <b>PD02</b> is the LT3042&rsquo;s enable, on when it is HIGH, and its output is regulated. Choosing the pin the board does not use leaves the bridge unpowered: every reading is zero and the AD7193 diagnostics report no reference, because with the rail down REFIN really is absent. Applies immediately; stored on the node, and it survives a firmware update.',
+  ['PC00 \u2014 FET gate, active low','PD02 \u2014 LT3042 enable, active high']],
  ['RAIL_MODE','When the analog rail (AVDD / excitation) is on','sel',0,0,'',
   'When the 5 V rail feeding AVDD and the bridge excitation is on. Switching it on restarts the regulator, the reference and the bridge warm-up: excitation heats the gauges and the zero drifts for seconds afterwards, visible at gain 128. <b>Switched</b> is the original behaviour, and makes the live stream re-excite the bridge for every sample and read it ~50 ms later. <b>Held for the collection</b> (default) keeps the rail up for a whole live stream, so every sample after the first is on a warming bridge. A train capture is held for its whole passage in BOTH of those modes, so they will not differ on uploaded events. <b>Always on while monitoring</b> is what captures trains on a fully warm bridge — at the cost of the rail running continuously, roughly 9 mA for a 350 Ω bridge at 3 V. Measure the battery budget before using it in the field. Applies immediately; stored on the node.',
   ['Switched per reading','Held for the collection','Always on while monitoring']],
@@ -1957,7 +1961,11 @@ function setCfgField(name, val, fromNode = true) {
   if (name === 'PGA_GAIN') {
     const i = GAIN_STEPS.indexOf(String(parseInt(val,10)));
     el.value = String(i < 0 ? GAIN_STEPS.length-1 : i);
-  } else el.value = val;
+  /* Some settings are reported with a readable suffix - RAIL_GATE answers
+   * "0,PC00,ACTIVE_LOW" in the settings dump. A picker only has the index
+   * as an option value, and assigning the whole string silently selects
+   * nothing, so the field would sit blank and save as an edit. */
+  } else el.value = (el.tagName === 'SELECT' && val.includes(',')) ? val.split(',')[0] : val;
   if (fromNode) { cfgKnown.set(name, cfgWire(name,el)); el.dataset.edited = ''; }
   else el.dataset.edited = '1';
 }
@@ -3055,6 +3063,15 @@ function handleLine(line) {
     case 'RAIL_MODE': case 'RAIL_SETTLE_MS':
     case 'OUTPUT_QUANTITY': case 'GAUGE_FACTOR': case 'BRIDGE': case 'STRAIN_ZERO_MV_V':
       setCfgField(key, val); mirrorToPanels(key, val); break;
+    /* The node reports the gate as "0,PC00,ACTIVE_LOW" - the index for the
+     * picker, then the pin and polarity in words, which is what someone
+     * reading a log of a node that measures zero needs to see. */
+    case 'RAIL_GATE': {
+      const parts = val.split(',');
+      setCfgField(key, parts[0]);
+      if (parts.length > 1) setTxt('a-gate', parts.slice(1).join(' \u00b7 '), '');
+      break;
+    }
     case 'RAIL_ON': case 'AD_POWER': case 'AD_RAIL':
       setTxt('a-rail', val.startsWith('1') ? 'on' : 'off', val.startsWith('1') ? 'var(--good)' : 'inherit'); break;
     case 'TB_TLS':
@@ -3162,20 +3179,29 @@ function handleCalResult(val) {
     if (ok) {
       note.textContent = `Span set to ${p[2]} at raw ${p[3]}. Calibration complete.`;
     } else {
-      const why = p[2], nom = p[4];
-      const applied = parseFloat($('k-known').value);
+      /*
+       * p[4] nominal kN, p[5] the net mV/V measured, p[6] the span that was
+       * refused. The last two are appended by newer firmware; an older node
+       * sends neither and the message simply says less.
+       */
+      const why = p[2], nom = p[4], mv = p[5], span = p[6];
       const cap = parseFloat($('c-cap').value);
       let msg = 'Span refused (' + why + ').';
       if (why === 'RANGE' && nom !== undefined) {
         const n = parseFloat(nom);
-        msg += ` The cell reads ${nom} kN there, but you entered ${applied} kN.`;
-        if (Number.isFinite(cap) && applied < cap * 0.01) {
-          msg += ` ${applied} kN is under 1% of the ${cap} kN capacity — too small`
-               + ` to calibrate against. Use a larger load, or set the capacity`
-               + ` to match the cell actually fitted.`;
-        } else if (Number.isFinite(n) && n > 0) {
-          msg += ` That is a factor of ${(n/applied).toFixed(2)} — check`
-               + ` CAPACITY_KN, MV_PER_V and PGA_GAIN before the load.`;
+        msg += mv !== undefined
+          ? ` The node measured ${mv} mV/V — ${nom} kN on the datasheet scaling.`
+          : ` The cell reads ${nom} kN there.`;
+        if (span !== undefined) {
+          msg += ` Against what you entered that is a span of ${span}, outside`
+               + ` the 0.5–2.0 a real cell can be.`;
+        }
+        msg += ` Either the reference is not actually on the input, or`
+             + ` CAPACITY_KN / MV_PER_V / PGA_GAIN do not match this cell.`;
+        if (Number.isFinite(n) && Number.isFinite(cap) && cap > 0
+            && Math.abs(n) < cap * 0.01) {
+          msg += ` The reading is also under 1% of the ${cap} kN capacity, which`
+               + ` is too small to calibrate against whatever the reference says.`;
         }
       }
       note.textContent = msg;
@@ -4603,7 +4629,7 @@ function loadDemo() {
   PROF_ACTIVE = 'base';
 
   CFG.forEach(r => { if (isHeading(r)) return;
-    const d = {CAPACITY_KN:150,MV_PER_V:2,PGA_GAIN:128,ADC_CHOP:0,RAIL_MODE:1,RAIL_SETTLE_MS:50,OUTPUT_QUANTITY:0,GAUGE_FACTOR:2,BRIDGE:0,STRAIN_ZERO_MV_V:0,
+    const d = {CAPACITY_KN:150,MV_PER_V:2,PGA_GAIN:128,ADC_CHOP:0,RAIL_GATE:0,RAIL_MODE:1,RAIL_SETTLE_MS:50,OUTPUT_QUANTITY:0,GAUGE_FACTOR:2,BRIDGE:0,STRAIN_ZERO_MV_V:0,
       ACTIVITY_MG:118,INACTIVITY_MG:59,ACTIVITY_TIME_MS:120,INACTIVITY_MS:2000,
       WAKE_CONFIRM_MS:400,PROFILE_BASE_S:60,PROFILE_TRAIN_S:60,
       TRAIN_TIMEOUT_S:180,LOAD_RATE_HZ:100,ACCEL_RATE_HZ:25,
