@@ -181,6 +181,13 @@ input:focus,select:focus{outline:2px solid var(--series-1);outline-offset:-1px}
 /* A changed-but-unsaved field, so a half-finished edit is visible at a glance. */
 #cfg-table [data-edited="1"]{outline:2px solid var(--warn);outline-offset:-1px}
 #cfg-table tr[hidden]{display:none}
+    .cal2-step{border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+    .cal2-step.done{border-color:var(--good);background:rgba(34,197,94,.06)}
+    .cal2-head{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+    .cal2-num{display:inline-flex;align-items:center;justify-content:center;
+      width:20px;height:20px;border-radius:50%;background:var(--series-1);
+      color:#fff;font-size:12px;font-weight:600;flex:0 0 auto}
+    .cal2-step.done .cal2-num{background:var(--good)}
 ol.steps{margin:8px 0 0 20px;font-size:13px;color:var(--text-secondary);line-height:1.7}
 ol.steps b{color:var(--text-primary)}
 </style>
@@ -512,44 +519,80 @@ ol.steps b{color:var(--text-primary)}
     <h2>3 &middot; Calibration</h2>
     <div class="grid" style="margin-bottom:0">
       <div>
-        <ol class="steps">
-          <li>With <b>only the dead load</b> on the structure, press
-              <b>Tare</b>. This records the zero point.</li>
-          <li>Apply a <b>known load</b> and let it settle.</li>
-          <li>Type that load in kN and press <b>Set span</b>.</li>
-        </ol>
-        <div class="notice" style="margin:12px 0 0">
-          Tare <em>before</em> span, never after. Span computed on an untared
-          reading folds the dead load into the scale factor: the cell then reads
-          correctly at exactly the calibration point and wrongly everywhere
-          else &mdash; and the one check most installers perform is at the
-          calibration point.
+        <div class="sub" style="margin-bottom:10px">
+          Connect a <b>load cell simulator</b> to the bridge input and give the
+          node two known outputs. It fits a line through both, which corrects
+          the converter&rsquo;s offset and its gain together. That is the whole
+          procedure &mdash; there is no separate tare or span step afterwards.
         </div>
+
+        <div class="cal2-step" id="cal2-s1">
+          <div class="cal2-head"><span class="cal2-num">1</span>
+            <b>Set the simulator to its low output</b></div>
+          <div class="sub">Typically <b>0.00 mV/V</b>. Let the live reading
+            below settle before capturing.</div>
+          <div class="row" style="margin-top:8px">
+            <input type="number" id="cal2-mv1" step="0.01" value="0.00"
+                   style="width:110px"> <span class="sub">mV/V applied</span>
+            <button class="sm primary" id="btn-cal2-p1">Capture point 1</button>
+          </div>
+          <div class="sub" id="cal2-r1" style="margin-top:6px">&mdash;</div>
+        </div>
+
+        <div class="cal2-step" id="cal2-s2" style="margin-top:10px">
+          <div class="cal2-head"><span class="cal2-num">2</span>
+            <b>Set the simulator to its high output</b></div>
+          <div class="sub">Typically <b>2.00 mV/V</b>. At least
+            <b>0.5 mV/V</b> away from the first point, or the converter&rsquo;s
+            own noise ends up in the gain correction.</div>
+          <div class="row" style="margin-top:8px">
+            <input type="number" id="cal2-mv2" step="0.01" value="2.00"
+                   style="width:110px"> <span class="sub">mV/V applied</span>
+            <button class="sm primary" id="btn-cal2-p2">Capture point 2 &amp; calibrate</button>
+          </div>
+          <div class="sub" id="cal2-r2" style="margin-top:6px">&mdash;</div>
+        </div>
+
+        <div class="notice" id="cal2-outcome" style="margin:12px 0 0;display:none"></div>
+
+        <details style="margin-top:12px">
+          <summary class="sub">Older single-point method (tare, then span)</summary>
+          <div class="notice" style="margin:8px 0">
+            Kept for a cell already carrying a structure, where no simulator can
+            be connected. Tare <em>before</em> span, never after: a span computed
+            on an untared reading folds the dead load into the scale factor, and
+            the cell then reads correctly at exactly the calibration point and
+            wrongly everywhere else.
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button class="sm" id="btn-tare">Tare at zero</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <input type="number" id="k-known" step="any" placeholder="known kN"
+                   style="width:110px">
+            <button class="sm" id="btn-span">Set span from kN</button>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <input type="number" id="k-knownmv" step="any" placeholder="known mV/V"
+                   style="width:110px">
+            <button class="sm" id="btn-spanmv">Set span from mV/V</button>
+          </div>
+        </details>
       </div>
       <div>
         <div class="kv"><span class="k">Status</span><span class="v" id="k-valid">&mdash;</span></div>
         <div class="kv"><span class="k">Zero (raw code)</span><span class="v" id="k-zero">&mdash;</span></div>
         <div class="kv"><span class="k">Span factor</span><span class="v" id="k-span">&mdash;</span></div>
         <div class="kv"><span class="k">Live reading</span><span class="v" id="k-live">&mdash;</span></div>
+        <div class="kv"><span class="k">Converter correction</span><span class="v" id="k-corr">&mdash;</span></div>
         <div class="row" style="margin-top:12px">
-          <button class="sm" id="btn-tare">Tare at zero</button>
-          <button class="sm danger" id="btn-calclr">Clear</button>
+          <button class="sm danger" id="btn-calclr">Clear calibration</button>
+          <button class="sm" id="btn-cal2-reset">Start over</button>
         </div>
-        <div class="row" style="margin-top:8px">
-          <input type="number" id="k-known" step="any" placeholder="known kN"
-                 style="width:110px">
-          <button class="sm" id="btn-span">Set span from kN</button>
+        <div class="sub" style="margin-top:8px">
+          Watch the reading settle in <b>5 &middot; Live reading</b> before
+          capturing either point.
         </div>
-        <div class="row" style="margin-top:6px">
-          <input type="number" id="k-knownmv" step="any" placeholder="known mV/V"
-                 style="width:110px">
-          <button class="sm primary" id="btn-spanmv">Set span from mV/V</button>
-        </div>
-        <div class="sub" style="margin-top:8px">Tare with the simulator at
-          <b>0 mV/V</b>, then apply a known output and set the span. Either box
-          does the same calibration &mdash; mV/V is the one a load cell
-          simulator is set in. Watch it settle in <b>5 &middot; Live
-          reading</b> below.</div>
         <div class="sub" id="cal-note" style="margin-top:8px"></div>
       </div>
     </div>
@@ -568,7 +611,8 @@ ol.steps b{color:var(--text-primary)}
       <div class="tile lv-main">
         <div class="k">Bridge output</div>
         <div class="v"><span id="lv-mvv">&mdash;</span><span class="u">mV/V</span></div>
-        <div class="sub">untared &mdash; the number Kinetix converts</div>
+        <div class="sub">span-corrected, untared &mdash; the number Kinetix
+          converts</div>
       </div>
       <div class="tile">
         <div class="k">Load</div>
@@ -2498,6 +2542,12 @@ function handleLine(line) {
     case 'CAL_ZERO': setTxt('k-zero', val); break;
     case 'CAL_SPAN': setTxt('k-span', val); break;
     case 'CAL_RESULT': handleCalResult(val); break;
+    /*
+     * Two-point calibration. CAL_PT answers one captured point; CAL_RESULT
+     * carries the fit once both exist, and is handled above with the others.
+     */
+    case 'CAL_PT': handleCalPoint(val); break;
+    case 'CAL_CORRECTION_PCT': showCorrection(val); break;
     case 'CAPACITY_KN': $('c-cap').value = val; recalcCell(); break;
     case 'MV_PER_V':    $('c-mvv').value = val; recalcCell(); break;
     case 'PGA_GAIN':    $('c-gain').value = String(parseInt(val,10)); recalcCell(); break;
@@ -3163,10 +3213,89 @@ function paintReadiness() {
  * actually reads at that point on datasheet scaling, which is what separates
  * "the load is too small for this capacity" from "the cell spec is wrong".
  */
+/*
+ * One captured point: "CAL_PT=<index>,OK,<code>,<applied mV/V>,<raw mV/V>".
+ *
+ * The raw figure is what the node made of that code with no calibration, so
+ * the operator sees the error being corrected rather than only the correction.
+ */
+function handleCalPoint(val) {
+  if (val === 'CLEARED') {
+    [1, 2].forEach(markPointPending);
+    $('cal2-outcome').style.display = 'none';
+    $('cal-note').textContent = 'Captured points discarded. Start again at point 1.';
+    return;
+  }
+  const p = val.split(',');
+  const index = parseInt(p[0], 10);
+  if (index !== 1 && index !== 2) return;
+  const row = $('cal2-r' + index);
+  if (p[1] !== 'OK') { row.textContent = 'Failed: ' + p.slice(1).join(','); return; }
+
+  const [, , code, applied, raw] = p;
+  row.innerHTML = `Captured at <b>${applied} mV/V</b> &mdash; raw code ${code},`
+                + ` node read ${raw} mV/V uncalibrated`;
+  $('cal2-s' + index).classList.add('done');
+}
+
+/* The correction as a percentage of the nominal gain - the number that says
+ * whether the hardware is healthy rather than merely calibrated. */
+function showCorrection(val) {
+  const pct = parseFloat(val);
+  setTxt('k-corr', (pct >= 0 ? '+' : '') + val + ' %',
+         Math.abs(pct) > 2 ? 'var(--warn)' : 'var(--good)');
+}
+
+function markPointPending(index) {
+  $('cal2-s' + index).classList.remove('done');
+  $('cal2-r' + index).textContent = '\u2014';
+}
+
+/*
+ * Why the outcome is a banner rather than a line of text: this is the moment
+ * the device becomes trustworthy, and an installer standing at a bridge needs
+ * to see it from arm's length.
+ */
+function showTwoPointOutcome(ok, html) {
+  const box = $('cal2-outcome');
+  box.style.display = '';
+  box.innerHTML = html;
+  box.style.borderColor = ok ? 'var(--good)' : 'var(--crit)';
+}
+
 function handleCalResult(val) {
   const p = val.split(',');
   const what = p[0], ok = p[1] === 'OK';
   const note = $('cal-note');
+
+  if (what === 'TWOPOINT') {
+    if (ok) {
+      // p: TWOPOINT,OK,<zero>,<span>,<lo mV/V>,<hi mV/V>
+      showTwoPointOutcome(true,
+        `<b>Calibration complete.</b> Fitted through ${p[4]} and ${p[5]} mV/V:`
+        + ` zero at raw code ${p[2]}, span factor ${p[3]}.`
+        + ` <br>This device is calibrated &mdash; there is no tare or span step`
+        + ` to follow. Dead load is recorded in the cloud, not here.`);
+      [1, 2].forEach(markPointPending);
+      $('cal-note').textContent = '';
+      send('GET_CAL');
+    } else {
+      // p: TWOPOINT,ERR,<reason>,<code lo>,<code hi>
+      const why = p[2];
+      let msg = `<b>Calibration refused (${why}).</b> `;
+      if (why === 'RANGE') {
+        msg += `The two points must be at least 0.5 mV/V apart, must read in`
+             + ` the same direction, and must imply a correction between 0.5x`
+             + ` and 2x. Codes captured: ${p[3]} and ${p[4]}.`
+             + ` Check the applied values and PGA_GAIN.`;
+      } else {
+        msg += 'Check the applied values and try the point again.';
+      }
+      msg += ` <br>Both points are kept &mdash; re-capture just the one that is wrong.`;
+      showTwoPointOutcome(false, msg);
+    }
+    return;
+  }
 
   if (what === 'TARE') {
     note.textContent = ok
@@ -3868,6 +3997,23 @@ $('btn-cell-wr').onclick = async () => {
   await send('COMMIT_CFG'); await send('GET_CAL');
   $('cell-note').textContent = 'Applied. Any previous span calibration was cleared.';
 };
+/* Two-point calibration. The node holds the captured points, so the page
+ * sends one command per point and renders what comes back - no calibration
+ * arithmetic happens here, where the configuration in use is not visible. */
+function capturePoint(index) {
+  const field = $('cal2-mv' + index);
+  const v = parseFloat(field.value);
+  if (!Number.isFinite(v)) {
+    $('cal-note').textContent = 'Enter the output the simulator is applying, in mV/V.';
+    field.focus();
+    return;
+  }
+  $('cal2-r' + index).textContent = 'Reading the converter\u2026';
+  send('CAL_PT=' + index + ',' + v);
+}
+$('btn-cal2-p1').onclick = () => capturePoint(1);
+$('btn-cal2-p2').onclick = () => capturePoint(2);
+$('btn-cal2-reset').onclick = () => send('CAL_PT_CLEAR');
 $('btn-tare').onclick  = () => send('CAL_TARE');
 $('btn-span').onclick  = () => {
   const v = parseFloat($('k-known').value);
@@ -3908,6 +4054,17 @@ $('btn-stream').onclick = () => send('STREAM=' + (streamOn ? 0 : 1));
  * second ago must not stay red once it is back in range. */
 const liveTxt = (id, t, c) => { const e = $(id); if (e) { e.textContent = t; e.style.color = c || ''; } };
 const FULL_SCALE_CODES = 8388608;
+
+/*
+ * The span factor the node is applying, as last reported by CAL_SPAN.
+ *
+ * 1 until a calibration has been read, which is also what an uncalibrated node
+ * uses - so a page that has not yet asked still computes what the node sends.
+ */
+function spanFactor() {
+  const v = parseFloat($('k-span').textContent);
+  return (Number.isFinite(v) && v > 0) ? v : 1;
+}
 const LIVE_WINDOW_MS = 60000;
 const live = { hist: [], last: null, lastAt: 0 };
 const dl = { on: false, samples: [], gain: 0, over: 0, t0: 0, ms: 0,
@@ -3922,7 +4079,26 @@ function parseSample(val) {
   }
   s.raw  = Number(s.raw);
   s.gain = Number(s.gain) || parseInt($('c-gain').value, 10) || 0;
-  s.mvv  = (Number.isFinite(s.raw) && s.gain > 0) ? s.raw / FULL_SCALE_CODES / s.gain * 1000 : NaN;
+  /*
+   * The NODE's figure, not one computed here.
+   *
+   * This page used to recompute raw/(2^23 x gain) and overwrite what the node
+   * sent. That discards the span correction, which lives in the node's config
+   * and appears in nothing the SAMPLE line exposes - so after a successful
+   * calibration the bridge-output tile showed the UNcalibrated ratio next to a
+   * kN figure that was calibrated, the two disagreed by exactly the span, and
+   * the calibration looked as though it had not worked.
+   *
+   * The local computation stays as the fallback, for a node whose firmware
+   * does not send mvv - with the span applied, so the fallback agrees with
+   * the figure the node would have sent.
+   */
+  const reportedMvv = Number(s.mvv);
+  s.mvv = Number.isFinite(reportedMvv)
+    ? reportedMvv
+    : ((Number.isFinite(s.raw) && s.gain > 0)
+        ? s.raw / FULL_SCALE_CODES / s.gain * 1000 * spanFactor()
+        : NaN);
   s.uv   = Number.isFinite(s.mvv) ? s.mvv * excitationMv : Number(s.uv);
   s.kn   = Number(s.kn);
   s.ch   = Number(s.ch);
@@ -4085,7 +4261,14 @@ async function finishDeadLoad(aborted, why) {
 function deadLoadResult(samples, gain, spec) {
   const n = samples.length;
   if (n < 10 || !(gain > 0)) return null;
-  const toMvv = raw => raw / FULL_SCALE_CODES / gain * 1000;
+  /*
+   * Span applied, because this number is typed into the cloud as the dead-load
+   * reference and is subtracted from readings the node sends - which carry the
+   * span. An uncorrected dead load against corrected readings would offset
+   * every live-load figure by the span error on the dead load.
+   */
+  const span = spanFactor();
+  const toMvv = raw => raw / FULL_SCALE_CODES / gain * 1000 * span;
   let sum = 0, lo = Infinity, hi = -Infinity;
   for (const s of samples) { sum += s.raw; lo = Math.min(lo, s.raw); hi = Math.max(hi, s.raw); }
   const mean = sum / n;
