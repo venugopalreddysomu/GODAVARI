@@ -111,6 +111,8 @@ section[role=tabpanel][hidden]{display:none}
 .lv-chart svg{display:block;width:100%;height:96px}
 .lv-chart .ln{fill:none;stroke:var(--series-1);stroke-width:1.8;vector-effect:non-scaling-stroke}
 .lv-chart .mean{stroke:var(--warn);stroke-width:1;stroke-dasharray:4 3;vector-effect:non-scaling-stroke}
+.lv-chart .lt-start{stroke:var(--series-2);stroke-width:1.2;vector-effect:non-scaling-stroke}
+.lv-chart .lt-stop{stroke:var(--series-3);stroke-width:1.2;stroke-dasharray:2 3;vector-effect:non-scaling-stroke}
 .lv-chart .thr{stroke:var(--crit);stroke-width:1.2;vector-effect:non-scaling-stroke}
 .lv-chart .bar{fill:var(--text-secondary);opacity:.55}
 .lv-chart .bar-over{fill:var(--good)}
@@ -189,6 +191,31 @@ input:focus,select:focus{outline:2px solid var(--series-1);outline-offset:-1px}
       color:#fff;font-size:12px;font-weight:600;flex:0 0 auto}
     .cal2-step.done .cal2-num{background:var(--good)}
 ol.steps{margin:8px 0 0 20px;font-size:13px;color:var(--text-secondary);line-height:1.7}
+/* BridgeSense meters tab */
+.badge[hidden]{display:none}
+#t-meters td .sub{display:block;font-family:inherit;font-weight:400}
+#t-meters td{white-space:nowrap}
+#t-meters td.mt-reading{white-space:normal}
+.mt-wide{grid-template-columns:1fr 190px auto}
+.mt-kind{display:inline-block;white-space:nowrap;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:650;
+  font-family:inherit;border:1px solid var(--border-strong);color:var(--text-secondary)}
+.mt-kind.tilt{color:var(--series-1);border-color:color-mix(in srgb,var(--series-1) 45%,transparent)}
+.mt-kind.vib{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.mt-name{font-family:inherit;font-weight:650;color:var(--text-primary)}
+.mt-reading{font-family:inherit;text-align:left !important;color:var(--text-primary);line-height:1.45;min-width:220px}
+.mt-reading .sub{display:block}
+.mt-flag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:5px;font-size:10.5px;font-weight:700}
+.mt-flag.ev{background:color-mix(in srgb,var(--series-1) 18%,transparent);color:var(--series-1)}
+.mt-flag.al{background:color-mix(in srgb,var(--crit) 18%,transparent);color:var(--crit)}
+.mt-sig{display:inline-flex;gap:2px;align-items:flex-end;height:12px;vertical-align:-1px;margin-right:4px}
+.mt-sig i{display:block;width:3px;background:var(--border-strong);border-radius:1px}
+.mt-sig i.on{background:var(--good)}
+.mt-actions{white-space:nowrap}
+.mt-actions button{margin-left:4px}
+#mt-feed{max-height:260px;overflow:auto}
+#mt-feed td{font-size:11.5px}
+.mt-progress{height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden;margin-top:8px}
+.mt-progress span{display:block;height:100%;width:0;background:var(--series-1);transition:width .3s linear}
 ol.steps b{color:var(--text-primary)}
 </style>
 </head>
@@ -218,6 +245,7 @@ ol.steps b{color:var(--text-primary)}
   <button role="tab" data-tab="t-dash"  aria-selected="true">Dashboard</button>
   <button role="tab" data-tab="t-comm"  aria-selected="false">Commissioning</button>
   <button role="tab" data-tab="t-trig"  aria-selected="false">Trigger</button>
+  <button role="tab" data-tab="t-meters" aria-selected="false">Meters</button>
   <button role="tab" data-tab="t-adxl-test" aria-selected="false">Accelerometer</button>
   <button role="tab" data-tab="t-data"  aria-selected="false">Data</button>
   <button role="tab" data-tab="t-life"  aria-selected="false">Lifecycle</button>
@@ -696,8 +724,176 @@ ol.steps b{color:var(--text-primary)}
   </div>
 </section>
 
+<!-- ══════════════════════════ METERS ══════════════════════════ -->
+<section role="tabpanel" id="t-meters" hidden>
+ <div class="card wide" style="margin-bottom:14px">
+   <h2>BridgeSense meters relayed by this node</h2>
+   <p class="sub">
+     The <b>Tilt T1</b> and <b>Vibe V1</b> meters broadcast their readings over Bluetooth and have no modem of their own.
+     This node listens for the meters paired with it and uploads their readings in its own sessions. In the cloud each
+     meter is a device of its own, <b>TILT-&lt;node&gt;</b> or <b>VIB-&lt;node&gt;</b>, under this node.
+     After every train the node keeps listening for the <b>wait</b> below before it uploads, so a vibration meter&rsquo;s
+     report of the same train goes up with the load.
+   </p>
+   <div class="row" style="margin-top:10px">
+     <span class="badge" id="mt-b-listen"><span class="dot"></span><span id="mt-listen-t">Listening &mdash;</span></span>
+     <span class="badge" id="mt-b-scan"><span class="dot"></span><span id="mt-scan-t">Scanner &mdash;</span></span>
+     <span class="badge"><span id="mt-pending-t">Pending &mdash;</span></span>
+     <span class="badge" id="mt-b-hold" hidden><span class="dot"></span><span id="mt-hold-t">Upload waiting for the meters</span></span>
+     <span class="spacer"></span>
+     <label class="sub" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="mt-live" checked> Live readings</label>
+     <button class="sm" id="mt-refresh">Refresh</button>
+   </div>
+   <div class="cfg-row" style="margin-top:10px">
+     <label for="mt-listen">Listen for paired meters</label>
+     <select id="mt-listen"><option value="1">On</option><option value="0">Off</option></select>
+     <span class="rng">always on for a mains node; off stops the relay</span>
+   </div>
+   <div class="cfg-row">
+     <label for="mt-wait">Wait after a train</label>
+     <input id="mt-wait" type="number" step="1" min="0" max="60">
+     <span class="rng">s &middot; 0&ndash;60 &middot; listen this long after a capture before uploading &middot; 0 = upload at once</span>
+   </div>
+   <div class="row" style="margin-top:9px">
+     <button class="sm primary" id="mt-save">Save</button>
+     <span class="rng" id="mt-save-r">&mdash;</span>
+   </div>
+ </div>
+
+ <div class="grid">
+   <div class="card">
+     <h2>Scan for nearby meters</h2>
+     <p class="sub">Lists every BridgeSense meter the node can hear, with its Bluetooth address (MAC), node ID and signal.
+       A meter is heard when it broadcasts a reading or advertises for the app; a Vibe V1 in a long reporting period may need a longer scan,
+       or a press of <i>Beacon now</i> in its app.</p>
+     <div class="row" style="margin-top:9px">
+       <select id="mt-scan-s" style="width:auto"><option value="10">10 s</option><option value="20" selected>20 s</option><option value="30">30 s</option><option value="60">60 s</option><option value="120">2 min</option></select>
+       <button class="sm primary" id="mt-scan">Scan</button>
+       <span class="rng" id="mt-scan-r">&mdash;</span>
+     </div>
+     <div class="mt-progress" id="mt-scan-bar" hidden><span id="mt-scan-fill"></span></div>
+     <table id="mt-found"><thead><tr><th>Device</th><th>MAC</th><th>Type</th><th>Signal</th><th></th></tr></thead>
+       <tbody><tr><td colspan="5" class="doc">No scan yet.</td></tr></tbody></table>
+   </div>
+   <div class="card">
+     <h2>Pair by MAC address</h2>
+     <p class="sub">For a meter that is out of range now, or whose MAC is on its label or in the BridgeSense app
+       (<i>Device info</i>). The type is learned from the meter&rsquo;s first reading if left on Auto.</p>
+     <div class="cfg-row mt-wide" style="margin-top:9px">
+       <label for="mt-mac">MAC address</label>
+       <input id="mt-mac" type="text" placeholder="60:A4:23:02:CA:55" autocomplete="off" spellcheck="false" style="font-family:ui-monospace,Menlo,Consolas,monospace">
+       <span class="rng">12 hex digits, with or without colons</span>
+     </div>
+     <div class="cfg-row mt-wide">
+       <label for="mt-kind">Type</label>
+       <select id="mt-kind"><option value="ANY">Auto</option><option value="TILT">Tilt T1</option><option value="VIB">Vibe V1</option></select>
+       <span class="rng"></span>
+     </div>
+     <div class="cfg-row mt-wide">
+       <label for="mt-label">Label</label>
+       <input id="mt-label" type="text" maxlength="23" placeholder="Pier 3 east">
+       <span class="rng">optional &middot; up to 23 characters, no commas or quotes</span>
+     </div>
+     <div class="row" style="margin-top:9px">
+       <button class="sm primary" id="mt-add">Pair meter</button>
+       <span class="rng" id="mt-add-r">&mdash;</span>
+     </div>
+   </div>
+ </div>
+
+ <div class="card wide" style="margin-top:14px">
+   <div class="row"><h2 style="margin:0">Paired meters</h2><span class="spacer"></span>
+     <button class="sm danger" id="mt-clear">Remove all</button></div>
+   <p class="sub" id="mt-note">Up to 16 meters. The latest reading is the node&rsquo;s own decode of what it last heard; the time is when it was heard.</p>
+   <div class="chart-wrap"><table id="mt-paired"><thead><tr>
+     <th>Meter</th><th>MAC</th><th>Type</th><th>Latest reading</th><th>Heard</th><th>Signal</th><th title="frames heard / queued for upload / lost to a full queue">Frames</th><th></th>
+   </tr></thead><tbody><tr><td colspan="8" class="doc">Not read yet.</td></tr></tbody></table></div>
+ </div>
+
+ <div class="card wide" style="margin-top:14px">
+   <h2>Live readings</h2>
+   <p class="sub">Each new reading of a paired meter as the node hears it (repeats of the same frame are not shown).
+     Needs <i>Live readings</i> on.</p>
+   <div id="mt-feed"><table><thead><tr><th>Heard</th><th>Meter</th><th>Reading</th><th>Signal</th></tr></thead>
+     <tbody id="mt-feed-b"><tr><td colspan="4" class="doc">Nothing yet.</td></tr></tbody></table></div>
+ </div>
+</section>
+
 <!-- ══════════════════════════ TRIGGER ══════════════════════════ -->
 <section role="tabpanel" id="t-trig" hidden>
+
+ <div class="card" id="lt-card" style="margin-bottom:14px">
+   <h2>Load-cell trigger (AD7193)</h2>
+   <p class="sub">
+     The node tracks the resting load &mdash; the <b>baseline</b> &mdash; and
+     starts a capture when the load moves more than the <b>start threshold</b>
+     away from it. The capture ends when the load is back within the
+     <b>stop threshold</b> of the baseline for the quiet time, and the trigger
+     re-arms only once it is inside that again. The gap between the two is the
+     hysteresis that keeps one train from being cut into several. Used when
+     <i>What starts a capture</i> is <b>Load cell</b>.
+   </p>
+   <div class="lv-head" style="margin-top:9px">
+     <div class="row">
+       <button class="sm primary" id="lt-watch">Watch load: off</button>
+       <button class="sm" id="lt-read">Read status</button>
+       <span class="badge" id="lt-badge"><span class="dot"></span><span id="lt-state">&mdash;</span></span>
+     </div>
+     <span class="sub" id="lt-note">In Setup, watching shows the trigger live without capturing. In Monitoring it reads the armed trigger.</span>
+   </div>
+   <div class="tiles" style="margin-top:9px">
+     <div class="tile lv-main"><div class="k">Load</div>
+       <div class="v"><span id="lt-load">&mdash;</span><span class="u">kN</span></div>
+       <div class="sub" id="lt-over">&mdash;</div></div>
+     <div class="tile"><div class="k">Baseline</div>
+       <div class="v"><span id="lt-base">&mdash;</span><span class="u">kN</span></div>
+       <div class="sub" id="lt-base-sub">&mdash;</div></div>
+     <div class="tile"><div class="k">Above baseline</div>
+       <div class="v"><span id="lt-exc">&mdash;</span><span class="u">kN</span></div>
+       <div class="sub" id="lt-exc-sub">&mdash;</div></div>
+     <div class="tile"><div class="k">Starts at</div>
+       <div class="v"><span id="lt-start-at">&mdash;</span><span class="u">kN</span></div>
+       <div class="sub" id="lt-start-sub">baseline &plusmn; start</div></div>
+     <div class="tile"><div class="k">Stops at</div>
+       <div class="v"><span id="lt-stop-at">&mdash;</span><span class="u">kN</span></div>
+       <div class="sub" id="lt-stop-sub">baseline &plusmn; stop</div></div>
+     <div class="tile"><div class="k">Triggers</div>
+       <div class="v"><span id="lt-fired">&mdash;</span></div>
+       <div class="sub" id="lt-fired-sub">since boot</div></div>
+   </div>
+   <div class="lv-chart">
+     <svg id="lt-spark" viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label="Load, baseline and trigger levels, last 60 seconds"></svg>
+     <div class="lv-axis"><span id="lt-lo">&mdash;</span><span id="lt-span">last 60 s &middot; kN &middot; solid = load, dashed = baseline, orange = start, green = stop</span><span id="lt-hi">&mdash;</span></div>
+   </div>
+
+   <h3 class="lv-h">Thresholds</h3>
+   <div class="cfg-row">
+     <label for="lt-start">Start threshold</label>
+     <input id="lt-start" type="number" step="0.1" min="0.05" max="1000">
+     <span class="rng">kN above (or below) the baseline &middot; 0.05&ndash;1000</span>
+   </div>
+   <div class="cfg-row">
+     <label for="lt-stop">Stop threshold</label>
+     <input id="lt-stop" type="number" step="0.1" min="0" max="1000">
+     <span class="rng">kN &middot; must be below start &middot; 0 = automatic (half the start, or 10% of the train&rsquo;s peak)</span>
+   </div>
+   <div class="cfg-row">
+     <label for="lt-count">Confirm samples</label>
+     <input id="lt-count" type="number" step="1" min="1" max="100">
+     <span class="rng">consecutive idle samples beyond start &middot; 3 at 10 Hz = 0.3 s</span>
+   </div>
+   <div class="cfg-row">
+     <label for="lt-tau">Baseline time constant</label>
+     <input id="lt-tau" type="number" step="10" min="10" max="36000">
+     <span class="rng">s &middot; how slowly the baseline follows the load</span>
+   </div>
+   <div class="row" style="margin-top:11px">
+     <button class="sm primary" id="lt-apply">Apply thresholds</button>
+     <button class="sm" id="lt-suggest">Suggest from what was seen</button>
+     <span class="rng" id="lt-result">&mdash;</span>
+   </div>
+   <p class="sub" id="lt-seen" style="margin-top:7px">Watch with no train on the span to see the idle noise, then during a train to see what it adds.</p>
+ </div>
 
  <div class="notice">
    <b>How a threshold gets chosen.</b> The ADXL367 wakes this node when the deck
@@ -1565,6 +1761,21 @@ const Link = (() => {
        * worth it: they are long enough to interleave visibly otherwise. */
       return { ms: 6000, key: cmd === 'GET_CAL' ? 'SITE' : 'ADC_CHOP' };
     }
+    if (cmd === 'TRIG_TEST=1' || cmd === 'TRIG_TEST=0') {
+      return { ms: 4000, match: (k, v) => (k === 'OK' && v === 'TRIG_TEST')
+                                         || (k === 'ERR' && v.startsWith('TRIG_TEST')) };
+    }
+    if (cmd === 'GET_TRIGGER') return { key: 'TRIG_FIRED', ms: 4000 };
+    if (cmd === 'GET_METERS') return { key: 'METERS_END', ms: 8000 };
+    if (cmd === 'GET_SCAN') return { key: 'SCAN_END', ms: 8000 };
+    if (cmd.startsWith('GET_METER=')) return { ms: 4000,
+      match: (k, v) => k === 'METER_LAST' || (k === 'ERR' && v.startsWith('GET_METER')) };
+    const mcmd = /^(METER_SCAN|ADD_METER|DEL_METER|METER_LABEL|METER_WATCH|CLEAR_METERS)=/.exec(cmd);
+    if (mcmd) {
+      const name = mcmd[1];
+      return { ms: 6000, match: (k, v) => (k === 'OK' || k === 'ERR')
+        && (v === name || v.startsWith(name + ',') || (name === 'CLEAR_METERS' && v.startsWith('CONFIRM'))) };
+    }
     return null;
   }
 
@@ -1907,7 +2118,30 @@ const CFG = [
  ['PROFILE_TRAIN_S','Train profile length','num',5,120,'s',
   'How long a train profile runs. Long enough for the slowest freight that crosses this span.'],
  ['TRAIN_TIMEOUT_S','Capture timeout','num',5,3600,'s',
-  'Hard stop on one capture. A seized bearing or a failed-high cell would otherwise capture forever.'],
+  'Hard stop on one capture. A seized bearing or a failed-high cell would otherwise capture forever. The full-rate waveform holds 12,000 samples - 120 s at 100 Hz, 240 s at 50 Hz - so a longer capture keeps its summary and trace and its waveform is marked truncated. Set it to the slowest train this span sees, with margin.'],
+
+ ['Load-cell trigger & waveform', null, null, null, null, null],
+ ['TRIG_SOURCE','What starts a capture','sel',0,0,'',
+  '<b>Load cell</b> watches the bridge itself: a slow idle scan tracks the resting load, and a capture starts when the load moves the threshold below away from it. Start AND end are both decided by the load; no accelerometer is needed, and none is used even if fitted. The mains design, and the default on the BG24 board. <b>Accelerometer</b> is the battery design: the ADXL367 wakes the node on motion. Applies at once; Monitoring re-arms on the new source.',
+  ['Accelerometer (ADXL367)','Load cell']],
+ ['TRIG_DELTA_KN','Start threshold','num',0.05,1000,'kN',
+  'How far the load must move from its resting baseline to count as a train. Measured from a moving baseline, never from zero, because a bearing&rsquo;s dead load is most of the reading and drifts with temperature. Choose it with TRIG_TEST in Setup: above the idle noise, well below what a train adds.'],
+ ['TRIG_STOP_KN','Stop threshold','num',0,1000,'kN',
+  'How close to the baseline the load must come back for the capture to end (for the quiet time), and for the trigger to re-arm afterwards. Must be below the start threshold: the gap between them keeps one train from being cut into several. 0 is automatic - half the start threshold, or 10% of the passage&rsquo;s own peak excursion, whichever is wider.'],
+ ['TRIG_COUNT','Trigger confirmation','num',1,100,'samples',
+  'Consecutive idle-scan samples beyond the threshold before a capture starts. At 10 Hz, 3 is 0.3 s - enough to ignore a single spike, short enough that the idle samples leading up to it, kept as the pre-trigger block, still hold the start of the passage.'],
+ ['TRIG_BASE_TAU_S','Baseline time constant','num',10,36000,'s',
+  'How slowly the resting baseline follows the load. Frozen while the load is beyond the threshold, so a train does not drag it up. Long enough to ignore a passage, short enough to follow a sunny afternoon; 300 s suits most sites.'],
+ ['TRIG_IDLE_HZ','Idle scan rate','num',2,100,'Hz',
+  'How often the load cell is read while waiting for a train. The capture itself runs at the Capture sample rate. Slower idle scanning means a longer converter filter and a quieter baseline; it only needs to be fast enough to see a passage begin, which takes seconds.'],
+ ['WAVE_ENABLE','Full-rate waveform','bool',0,0,'',
+  'Records every conversion of each passage - the whole train at the capture rate, led by the idle samples from just before the trigger - into the external flash, and uploads it after the event. About 30 kB per 90 s passage at 100 Hz, in ~10 publishes; with a hundred trains a day that is a few MB of mobile data. Waveforms that miss an upload are kept and sent in a later session. Off still records the summary, the per-second trace and the cycle counts.'],
+
+ ['BridgeSense meters (relay)', null, null, null, null, null],
+ ['METER_LISTEN','Listen for paired meters','bool',0,0,'',
+  'Keeps the Bluetooth scanner running for the Tilt T1 and Vibe V1 meters paired on the Meters tab, and uploads what they broadcast as devices of their own. On by default where the node is on mains. Pair, scan and see the latest readings on the Meters tab.'],
+ ['METER_WAIT_S','Wait for the meters after a train','num',0,60,'s',
+  'After a train, the upload is held this long while the node keeps listening, so a vibration meter&rsquo;s event report of the same train travels in the same session as the load. Set the Vibe V1&rsquo;s event report (evt_rpt_s) a few seconds shorter than this. 0 uploads at once.'],
 
  ['Acquisition', null, null, null, null, null],
  ['TRACE_ENABLE','Send passage shape','bool',0,1,'',
@@ -1915,7 +2149,7 @@ const CFG = [
  ['TRACE_PERIOD_MS','Trace bucket period','num',250,10000,'ms',
   'How much time each bucket of the trace covers. One second is about 11 m of train at the 40 km/h this line runs. A trace holds 64 buckets, and a passage that outruns them is NOT truncated - the buckets merge in pairs and the period doubles, so the whole passage is always covered and the console reports the period it ended up at. Note this cannot resolve individual axles at any setting: bogie axles are ~162 ms apart at line speed, and that needs the raw waveform, not this.'],
  ['LOAD_RATE_HZ','Capture sample rate','num',20,500,'Hz',
-  'Rate during a capture. The AD7193 cannot go below about 75 Hz, so lower values are clamped and the real rate is reported. Choose for bandwidth, not noise — even 300 Hz is 8 ppm of full scale.'],
+  'Rate during a capture, and so the rate of the full-rate waveform: 100 Hz resolves the axles of a bogie, 50 Hz halves the data. The AD7193 runs at 4.92 MHz / (1024 × FS) for FS 1..1023, so the rate is quantised (4.7 Hz to 4.8 kHz) and the real one is reported and sent with the waveform. Choose for bandwidth, not noise — even 300 Hz is 8 ppm of full scale.'],
  ['ACCEL_RATE_HZ','Accelerometer rate','num',12,100,'Hz',
   'ADXL367 output data rate. The part maxes out at 400 Hz; low rates keep the FIFO drain cheap.'],
  ['LOAD_END_FRAC','Load end fraction','num',0.02,0.5,'',
@@ -2009,7 +2243,7 @@ function setCfgField(name, val, fromNode = true) {
    * "0,PC00,ACTIVE_LOW" in the settings dump. A picker only has the index
    * as an option value, and assigning the whole string silently selects
    * nothing, so the field would sit blank and save as an edit. */
-  } else el.value = (el.tagName === 'SELECT' && val.includes(',')) ? val.split(',')[0] : val;
+  } else el.value = (el.tagName === 'SELECT' && String(val).includes(',')) ? String(val).split(',')[0] : val;
   if (fromNode) { cfgKnown.set(name, cfgWire(name,el)); el.dataset.edited = ''; }
   else el.dataset.edited = '1';
 }
@@ -2428,6 +2662,8 @@ function handleLine(line) {
     showAdxlLine(key, val);
   }
   axWakeField(key, val);
+  if ((key === 'WATCH' || key.startsWith('TRIG') || key === 'ACTIVITY') && ltLine(key, val)) return;
+  if (mtLine(key, val)) return;
 
   const mf = key.match(/^FATIGUE\[(\d+)\]$/);
   if (mf) { const i=+mf[1]; if (i<32) fatBins[i] = num(val)||0; return; }
@@ -2458,6 +2694,8 @@ function handleLine(line) {
       const p = val.split(',');
       if (p[1] === 'NOW') {
         log(`Event queued (${p[0]} pending) — uploading now`);
+      } else if (p[1] === 'METER_WAIT') {
+        log(`Event queued (${p[0]} pending) — uploading in ${p[2]} s, listening for the meters' reports of this train first`);
       } else {
         log(`Event queued (${p[0]} pending) — kept on the node; Setup does not`
             + ' upload on its own. Use Upload now, or arm Monitoring.', 'l-info');
@@ -3274,8 +3512,9 @@ function handleCalResult(val) {
       showTwoPointOutcome(true,
         `<b>Calibration complete.</b> Fitted through ${p[4]} and ${p[5]} mV/V:`
         + ` zero at raw code ${p[2]}, span factor ${p[3]}.`
-        + ` <br>This device is calibrated &mdash; there is no tare or span step`
-        + ` to follow. Dead load is recorded in the cloud, not here.`);
+        + ` <br><b>Saved to the node</b> &mdash; written to NVM3, so it survives a`
+        + ` power cycle. There is no tare or span step to follow and no separate`
+        + ` save. Dead load is recorded in the cloud, not here.`);
       [1, 2].forEach(markPointPending);
       $('cal-note').textContent = '';
       send('GET_CAL');
@@ -3384,6 +3623,15 @@ function mirrorToPanels(k, v) {
   if (k === 'GAUGE_FACTOR')     $('o-gf').value     = v;
   if (k === 'BRIDGE')           $('o-bridge').value = String(parseInt(v,10) || 0);
   if (k === 'STRAIN_ZERO_MV_V') $('o-zero').value   = v;
+  /* The trigger card keeps its own copy: it draws baseline +/- these. */
+  const lmap = {TRIG_DELTA_KN:'lt-start', TRIG_STOP_KN:'lt-stop', TRIG_COUNT:'lt-count', TRIG_BASE_TAU_S:'lt-tau'};
+  if (lmap[k] && $(lmap[k])) {
+    $(lmap[k]).value = v;
+    if (k === 'TRIG_DELTA_KN') lt.start = num(v);
+    if (k === 'TRIG_STOP_KN')  lt.stop  = num(v) || 0;
+    if (k === 'TRIG_COUNT')    lt.count = num(v);
+    ltPaint();
+  }
   if (['OUTPUT_QUANTITY','GAUGE_FACTOR','BRIDGE','STRAIN_ZERO_MV_V'].includes(k)) paintOutput();
   recalcCell();
 }
@@ -4198,6 +4446,208 @@ function paintLiveState() {
 }
 setInterval(paintLiveState, 1000);
 
+/* ── Load-cell trigger (AD7193) ──────────────────────────────────────────
+ * Painted only from what the node reports: WATCH= lines every 500 ms while
+ * TRIG_TEST runs in Setup, the TRIG_* block from GET_TRIGGER (polled while
+ * watching in Monitoring, where TRIG_TEST is refused), and the CFG_TRIG_
+ * rows. The levels drawn are baseline +/- threshold, the same comparison the
+ * firmware makes; a load below the baseline triggers too. */
+const LT_WINDOW_MS = 60000, LT_IDLE_GUARD_MS = 10000;
+const lt = { hist: [], base: null, load: null, start: null, stop: null, count: null,
+             watching: false, poll: null, idleMax: 0, idleN: 0, peak: 0, fired: null, state: '—',
+             beyond: [], pend: [] };
+
+/* The stop the firmware uses when TRIG_STOP_KN is 0, for the re-arm test.
+ * The end-of-capture test may sit higher: 10% of the passage's own peak. */
+const ltStopEff = () => (lt.stop > 0 ? lt.stop : (lt.start !== null ? lt.start / 2 : null));
+
+function ltSample(load, base, over) {
+  if (load === null) return;
+  lt.load = load;
+  if (base !== null) lt.base = base;
+  const now = Date.now();
+  lt.hist.push({ t: now, load, base: lt.base });
+  while (lt.hist.length && now - lt.hist[0].t > LT_WINDOW_MS) lt.hist.shift();
+  if (lt.base !== null) {
+    const exc = Math.abs(load - lt.base);
+    lt.peak = Math.max(lt.peak, exc);
+    if (lt.start !== null && exc >= lt.start) lt.beyond.push(now);
+    while (lt.beyond.length && now - lt.beyond[0] > LT_WINDOW_MS) lt.beyond.shift();
+    /*
+     * Idle noise is judged LT_IDLE_GUARD_MS late: a sample counts only if no
+     * reading went beyond the start threshold within that long either side
+     * of it. The ramps of a passage sit below the threshold too, and
+     * counting them as noise would suggest a threshold the train never
+     * reaches.
+     */
+    lt.pend.push({ t: now, exc });
+    while (lt.pend.length && now - lt.pend[0].t >= LT_IDLE_GUARD_MS) {
+      const q = lt.pend.shift();
+      if (!lt.beyond.some(b => Math.abs(b - q.t) < LT_IDLE_GUARD_MS)) {
+        lt.idleMax = Math.max(lt.idleMax, q.exc);
+        lt.idleN++;
+      }
+    }
+  }
+  if (over) setTxt('lt-over', 'beyond start: ' + over + ' samples');
+  ltPaint();
+}
+
+function ltPaint() {
+  const b = lt.base, s = lt.start, p = ltStopEff();
+  setTxt('lt-load', fmt(lt.load, 3));
+  setTxt('lt-base', fmt(b, 3));
+  const exc = (lt.load !== null && b !== null) ? lt.load - b : null;
+  setTxt('lt-exc', exc === null ? '—' : (exc >= 0 ? '+' : '') + exc.toFixed(3));
+  const beyond = exc !== null && s !== null && Math.abs(exc) >= s;
+  setTxt('lt-exc-sub', exc === null ? '—'
+    : beyond ? 'beyond the start threshold' : (p !== null && Math.abs(exc) < p ? 'inside the stop band' : 'between stop and start'),
+    beyond ? 'var(--warn)' : '');
+  setTxt('lt-start-at', (b !== null && s !== null) ? (b + s).toFixed(2) : '—');
+  setTxt('lt-start-sub', s !== null ? `baseline ± ${s.toFixed(2)}` + (b !== null ? ` (or below ${(b - s).toFixed(2)})` : '') : 'baseline ± start');
+  setTxt('lt-stop-at', (b !== null && p !== null) ? (b + p).toFixed(2) : '—');
+  setTxt('lt-stop-sub', p !== null ? `baseline ± ${p.toFixed(2)}` + (lt.stop > 0 ? '' : ' · automatic') : 'baseline ± stop');
+  setTxt('lt-fired', lt.fired === null ? '—' : String(lt.fired));
+  setTxt('lt-state', lt.state);
+  $('lt-badge').classList.toggle('on', lt.watching);
+  $('lt-watch').textContent = lt.watching ? 'Watch load: on' : 'Watch load: off';
+  if (lt.peak > 0) {
+    setTxt('lt-seen', (lt.idleN ? `Seen while watching: idle noise up to ±${lt.idleMax.toFixed(3)} kN from the baseline`
+                                : 'Seen while watching: idle noise not measured yet (needs 10 s clear of any train)')
+      + `, largest excursion ±${lt.peak.toFixed(3)} kN.`);
+  }
+  ltChart();
+}
+
+function ltChart() {
+  const svg = $('lt-spark'), pts = lt.hist;
+  if (pts.length < 2) { svg.innerHTML = ''; return; }
+  const b = lt.base, s = lt.start, p = ltStopEff();
+  let lo = Infinity, hi = -Infinity;
+  for (const q of pts) { lo = Math.min(lo, q.load); hi = Math.max(hi, q.load); }
+  if (b !== null && s !== null) { lo = Math.min(lo, b - s); hi = Math.max(hi, b + s); }
+  const pad = Math.max((hi - lo) * 0.1, 0.05);
+  const y0 = lo - pad, y1 = hi + pad, H = 120, W = 600;
+  const t1 = pts[pts.length - 1].t, t0 = t1 - LT_WINDOW_MS;
+  const X = t => ((t - t0) / LT_WINDOW_MS) * W;
+  const Y = v => H - ((v - y0) / (y1 - y0)) * H;
+  const hl = (v, cls) => `<line class="${cls}" x1="0" x2="${W}" y1="${Y(v).toFixed(2)}" y2="${Y(v).toFixed(2)}"></line>`;
+  let g = '';
+  if (b !== null) {
+    g += hl(b, 'mean');
+    if (s !== null) g += hl(b + s, 'lt-start') + hl(b - s, 'lt-start');
+    if (p !== null) g += hl(b + p, 'lt-stop') + hl(b - p, 'lt-stop');
+  }
+  const d = pts.map((q, i) => `${i ? 'L' : 'M'}${X(q.t).toFixed(1)},${Y(q.load).toFixed(2)}`).join('');
+  svg.innerHTML = g + `<path class="ln" d="${d}"></path>`;
+  setTxt('lt-lo', lo.toFixed(2));
+  setTxt('lt-hi', hi.toFixed(2));
+}
+
+/* key=value lines that belong to the trigger; false if not ours. */
+function ltLine(key, val) {
+  if (key === 'WATCH') {
+    const f = Object.fromEntries(val.split(',').map(x => x.split('=')));
+    const over = (f.over || '').split('/')[0];
+    ltSample(num(f.load_kn), num(f.base_kn), over && over !== '0' ? f.over : '');
+    return true;
+  }
+  switch (key) {
+    case 'TRIG_DELTA_KN': lt.start = num(val); break;
+    case 'TRIG_STOP_KN':  lt.stop = num(val) || 0; break;
+    case 'TRIG_COUNT':    lt.count = num(val); break;
+    case 'TRIG_STATE':    lt.state = val === 'OFF' ? 'not armed' : val === 'TEST' ? 'watching (test)' : 'armed in Monitoring'; break;
+    case 'TRIG_BASE_KN':  setTxt('lt-base-sub', val.includes('SETTLING') ? 'settling' : 'tracking'); break;
+    case 'TRIG_LOAD_KN':  ltSample(num(val), null, ''); break;
+    case 'TRIG_FIRED':    lt.fired = num(val); break;
+    case 'TRIG_BASE': {
+      const [v, why] = val.split(',');
+      lt.base = num(v);
+      setTxt('lt-base-sub', why === 'INIT' ? 'settled' : why === 'RESET' ? 'reset: load did not return' : 'tracking');
+      break;
+    }
+    case 'TRIG_TEST':
+      if (val === '0') { lt.watching = false; lt.state = 'not armed'; }
+      else if (val.startsWith('1')) { lt.watching = true; lt.state = 'watching (test)'; }
+      else if (val.startsWith('FIRE')) {
+        lt.fired = (lt.fired || 0) + 1;
+        setTxt('lt-over', 'would have started a capture', 'var(--warn)');
+      }
+      break;
+    case 'ACTIVITY':
+      if (!val.includes(',LOAD,')) return false;
+      setTxt('lt-over', 'capture started', 'var(--warn)');
+      return false;               /* the dashboard wants it too */
+    default: return false;
+  }
+  /* TRIG_BASE_KN arrives before TRIG_LOAD_KN in the GET_TRIGGER block. */
+  if (key === 'TRIG_BASE_KN') lt.base = num(val.split(',')[0]);
+  ltPaint();
+  return true;
+}
+
+function ltStopWatch() {
+  if (lt.poll) { clearInterval(lt.poll); lt.poll = null; }
+}
+
+$('lt-watch').onclick = async () => {
+  if (lt.watching) {
+    ltStopWatch();
+    lt.watching = false;
+    if (ready.mode !== 1) { try { await send('TRIG_TEST=0'); } catch (e) { /* reported by the link */ } }
+    ltPaint();
+    return;
+  }
+  lt.hist = []; lt.idleMax = 0; lt.idleN = 0; lt.peak = 0; lt.beyond = []; lt.pend = [];
+  if (ready.mode === 1) {
+    /* Monitoring is already watching for real; read it once a second. */
+    lt.watching = true;
+    lt.poll = setInterval(() => { send('GET_TRIGGER').catch(() => {}); }, 1000);
+    send('GET_TRIGGER').catch(() => {});
+  } else {
+    try { await send('TRIG_TEST=1'); lt.watching = true; }
+    catch (e) { setTxt('lt-note', e.message, 'var(--crit)'); }
+  }
+  ltPaint();
+};
+$('lt-read').onclick = () => send('GET_TRIGGER').catch(() => {});
+
+$('lt-apply').onclick = async () => {
+  const start = parseFloat($('lt-start').value), stop = parseFloat($('lt-stop').value || '0');
+  const count = parseInt($('lt-count').value, 10), tau = parseInt($('lt-tau').value, 10);
+  if (!(start >= 0.05 && start <= 1000)) { setTxt('lt-result', 'Start threshold must be 0.05–1000 kN', 'var(--crit)'); return; }
+  if (!(stop === 0 || (stop >= 0.05 && stop < start))) {
+    setTxt('lt-result', 'Stop threshold must be 0 (automatic) or between 0.05 kN and the start threshold', 'var(--crit)');
+    return;
+  }
+  setTxt('lt-result', 'applying…', '');
+  try {
+    /* Stop to 0 first: the node refuses a start at or below a set stop, and a
+     * stop at or above the start, so this order is valid from any old pair. */
+    await send('SET_CFG_TRIG_STOP_KN=0');
+    await send('SET_CFG_TRIG_DELTA_KN=' + start);
+    if (stop > 0) await send('SET_CFG_TRIG_STOP_KN=' + stop);
+    if (count >= 1 && count <= 100) await send('SET_CFG_TRIG_COUNT=' + count);
+    if (tau >= 10 && tau <= 36000) await send('SET_CFG_TRIG_BASE_TAU_S=' + tau);
+    await send('GET_TRIGGER');
+    setTxt('lt-result', 'saved on the node', 'var(--good)');
+  } catch (e) {
+    setTxt('lt-result', e.message, 'var(--crit)');
+  }
+};
+
+$('lt-suggest').onclick = () => {
+  if (!lt.idleN) { setTxt('lt-result', 'Watch the load for at least 10 s with no train on the span first', 'var(--warn)'); return; }
+  /* Four times the idle noise, at least 0.5 kN; stop at half of it, which
+   * still clears the noise by two to one. */
+  const start = Math.max(4 * lt.idleMax, 0.5);
+  $('lt-start').value = start.toFixed(2);
+  $('lt-stop').value  = (start / 2).toFixed(2);
+  let note = 'suggested — press Apply to save';
+  if (lt.peak > 0 && lt.peak < start * 1.5) note += '; a train only reached ±' + lt.peak.toFixed(2) + ' kN, check it clears the start';
+  setTxt('lt-result', note, 'var(--warn)');
+};
+
 function dlNote(msg, color) { liveTxt('dl-note', msg, color || ''); }
 
 async function startDeadLoad() {
@@ -4760,6 +5210,324 @@ $('btn-theme').onclick = () => {
  * Demo — every panel populated, no hardware. Shows the state a bench node
  * is actually in: ADXL not fitted, cell uncalibrated.
  * ═══════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+ * BridgeSense meters (Tilt T1, Vibe V1) relayed by this node
+ *
+ * Lines (ss_core/ss_meter.h, ss_spp.c):
+ *   METER=<i>,<mac>,<TILT|VIB|ANY>,<node>,<label|->,<heard>,<age_s|->,<rssi>,<frames>,<queued>,<dropped>
+ *   METER_LAST=<mac>,<age_s>,<rssi>,<TILT|VIB>,k=v,...   (GET_METER, GET_METERS, live with METER_WATCH=1)
+ *   METERS_END=<n>,pending=,dropped=,listen=,scanning=,wait=,watch=,hold=
+ *   SCAN_DEV / SCAN=<mac>,<kind>,<node>,<rssi>,<name|->,<paired>   SCAN_END=<n>
+ *   METER_WAIT=<s>,meters=<n> | METER_WAIT=DONE,frames=,pending=,events=
+ * ═══════════════════════════════════════════════════════════════════════ */
+const mt = { paired: [], buf: [], last: {}, found: new Map(), summary: {}, scanTimer: null,
+             scanEnd: 0, scanS: 0, feed: [], refresh: null, tick: null };
+
+const mtEsc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mtKindName = k => k === 'TILT' ? 'Tilt T1' : (k === 'VIB' ? 'Vibe V1' : 'Unknown yet');
+const mtKindChip = k => `<span class="mt-kind ${k === 'TILT' ? 'tilt' : (k === 'VIB' ? 'vib' : '')}">${mtKindName(k)}</span>`;
+function mtSignal(rssi) {
+  if (rssi === null || rssi === undefined || isNaN(rssi) || rssi === 0) return '<span class="sub">&mdash;</span>';
+  const bars = rssi >= -60 ? 4 : rssi >= -70 ? 3 : rssi >= -80 ? 2 : rssi >= -90 ? 1 : 0;
+  return `<span class="mt-sig">${[4, 7, 10, 12].map((h, i) => `<i style="height:${h}px" class="${i < bars ? 'on' : ''}"></i>`).join('')}</span>${rssi} dBm`;
+}
+function mtAgo(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return s + ' s ago';
+  if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+  return Math.floor(s / 86400) + ' d ago';
+}
+const mtClock = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function mtTitle(m) {
+  if (m.label) return m.label;
+  if (m.node > 0) return (m.kind === 'VIB' ? 'VIB-' : 'TILT-') + m.node;
+  return m.mac;
+}
+function mtFields(parts) {
+  const f = {};
+  parts.forEach(p => { const i = p.indexOf('='); if (i > 0) f[p.slice(0, i)] = p.slice(i + 1); });
+  return f;
+}
+/* The node's decode of a frame, as a person reads it. */
+function mtReading(kind, f) {
+  const temp = f.t !== undefined ? `${(+f.t).toFixed(1)} °C` : '';
+  const batt = f.vbat && +f.vbat > 0 ? `${(+f.vbat / 1000).toFixed(2)} V` : '';
+  const extra = [temp, batt].filter(Boolean).join(' · ');
+  if (kind === 'TILT') {
+    const alert = f.flags && (parseInt(f.flags, 16) & 1) ? '<span class="mt-flag al">ALERT</span>' : '';
+    return `X ${f.x}° · Y ${f.y}° · Z ${f.z}°${alert}<span class="sub">${extra}</span>`;
+  }
+  if (f.mode) {
+    const unit = { PPV: 'mm/s', PGA: 'mg', PSA: 'mg', MTVV: 'dB' }[f.mode] || '';
+    const flags = (f.event === '1' ? '<span class="mt-flag ev">EVENT</span>' : '')
+                + (f.alert === '1' ? '<span class="mt-flag al">ALERT</span>' : '');
+    const rec = f.records !== undefined ? ` · ${f.records} record${f.records === '1' ? '' : 's'}` : '';
+    return `${f.mode} max ${f.max} ${unit}${rec}${flags}<span class="sub">${extra}</span>`;
+  }
+  if (f.frame !== undefined) return `frame ${f.frame}${f.first ? ' · ' + f.first : ''}`;
+  return '&mdash;';
+}
+function mtFeedAdd(mac, rssi, kind, f, age) {
+  const m = mt.paired.find(x => x.mac === mac) || mt.buf.find(x => x.mac === mac);
+  mt.feed.unshift({ at: Date.now() - (age || 0) * 1000, mac, title: m ? mtTitle(m) : mac, kind, f, rssi });
+  mt.feed = mt.feed.slice(0, 60);
+  const tb = $('mt-feed-b');
+  tb.innerHTML = mt.feed.map(e => `<tr><td>${mtClock(e.at)}</td><td class="mt-name" style="text-align:left">${mtEsc(e.title)}</td>`
+    + `<td class="mt-reading">${mtReading(e.kind, e.f)}</td><td>${mtSignal(e.rssi)}</td></tr>`).join('');
+}
+
+function mtPaintSummary() {
+  const s = mt.summary;
+  const listen = s.listen === '1';
+  $('mt-b-listen').classList.toggle('on', listen);
+  setTxt('mt-listen-t', s.listen === undefined ? 'Listening —' : (listen ? 'Listening' : 'Not listening'));
+  $('mt-b-scan').classList.toggle('on', s.scanning === '1');
+  setTxt('mt-scan-t', s.scanning === undefined ? 'Scanner —' : (s.scanning === '1' ? 'Scanner running' : 'Scanner off'));
+  setTxt('mt-pending-t', s.pending === undefined ? 'Pending —'
+    : `${s.pending} frame${s.pending === '1' ? '' : 's'} to upload` + (+s.dropped > 0 ? ` · ${s.dropped} lost` : ''));
+  $('mt-b-hold').hidden = s.hold !== '1';
+  if (document.activeElement !== $('mt-listen') && s.listen !== undefined) $('mt-listen').value = s.listen;
+  if (document.activeElement !== $('mt-wait') && s.wait !== undefined) $('mt-wait').value = s.wait;
+}
+
+function mtPaintPaired() {
+  const tb = $('mt-paired').querySelector('tbody');
+  if (!mt.paired.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="doc">No meters paired. Scan for nearby meters, or pair one by its MAC address.</td></tr>';
+    return;
+  }
+  tb.innerHTML = mt.paired.map(m => {
+    const L = mt.last[m.mac];
+    const reading = L ? mtReading(L.kind, L.f) : (m.heard ? '<span class="sub">no reading decoded yet</span>' : '<span class="sub">not heard since the node started</span>');
+    const heardAt = L ? L.at : (m.heardAt || null);
+    const heard = heardAt ? `${mtClock(heardAt)}<span class="sub" data-ago="${heardAt}">${mtAgo(heardAt)}</span>` : '<span class="sub">never</span>';
+    return `<tr><td class="mt-name">${mtEsc(mtTitle(m))}${m.node > 0 ? `<span class="sub">node ${m.node}</span>` : ''}</td>`
+      + `<td>${m.mac}</td><td>${mtKindChip(m.kind)}</td><td class="mt-reading">${reading}</td>`
+      + `<td>${heard}</td><td>${mtSignal(m.heard ? m.rssi : null)}</td>`
+      + `<td title="heard / queued / lost">${m.frames} / ${m.queued} / ${m.dropped}</td>`
+      + `<td class="mt-actions"><button class="sm" data-mt-read="${m.mac}">Read</button>`
+      + `<button class="sm" data-mt-label="${m.mac}">Rename</button>`
+      + `<button class="sm danger" data-mt-del="${m.mac}">Remove</button></td></tr>`;
+  }).join('');
+}
+
+function mtPaintFound() {
+  const tb = $('mt-found').querySelector('tbody');
+  const rows = [...mt.found.values()].sort((a, b) => b.rssi - a.rssi);
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="5" class="doc">${mt.scanEnd ? 'Listening…' : 'No meters heard. Check the meter is on and its beacons are enabled, then scan again for longer.'}</td></tr>`;
+    return;
+  }
+  tb.innerHTML = rows.map(d => {
+    const paired = d.paired || mt.paired.some(m => m.mac === d.mac);
+    const name = d.name || (d.node > 0 ? (d.kind === 'VIB' ? 'VIB-' : 'TILT-') + d.node : '—');
+    return `<tr><td class="mt-name">${mtEsc(name)}${d.node > 0 ? `<span class="sub">node ${d.node}</span>` : ''}</td>`
+      + `<td>${d.mac}</td><td>${mtKindChip(d.kind)}</td><td>${mtSignal(d.rssi)}</td><td class="mt-actions">`
+      + (paired ? '<span class="badge on"><span class="dot"></span>Paired</span>'
+                : `<button class="sm primary" data-mt-pair="${d.mac}" data-kind="${d.kind}">Pair</button>`
+                  + `<button class="sm" data-mt-use="${d.mac}" data-kind="${d.kind}" title="Copy to the form to pair with a label">Edit…</button>`)
+      + '</td></tr>';
+  }).join('');
+}
+
+function mtLine(key, val) {
+  switch (key) {
+    case 'METER': {
+      const p = val.split(',');
+      if (p.length < 11) return true;
+      const m = { mac: p[1], kind: p[2], node: +p[3] || 0, label: p[4] === '-' ? '' : p[4], heard: p[5] === '1',
+                  rssi: +p[7], frames: +p[8], queued: +p[9], dropped: +p[10] };
+      if (m.heard && p[6] !== '-') m.heardAt = Date.now() - (+p[6]) * 1000;
+      mt.buf.push(m);
+      return true;
+    }
+    case 'METERS_END': {
+      mt.paired = mt.buf; mt.buf = [];
+      const p = val.split(',');
+      mt.summary = Object.assign({ count: p[0] }, mtFields(p.slice(1)));
+      /* A meter no longer paired has no row; drop its reading too. */
+      Object.keys(mt.last).forEach(mac => { if (!mt.paired.some(m => m.mac === mac)) delete mt.last[mac]; });
+      mtPaintSummary(); mtPaintPaired(); mtPaintFound();
+      return true;
+    }
+    case 'METER_LAST': {
+      const p = val.split(',');
+      if (p.length < 4 || p[3] === 'NONE') return true;
+      const age = +p[1] || 0, rssi = +p[2], f = mtFields(p.slice(4));
+      const prev = mt.last[p[0]];
+      const at = Date.now() - age * 1000;
+      mt.last[p[0]] = { at, kind: p[3], f, rssi };
+      /* A new reading (not the same one read back by GET_METERS) goes to the feed. */
+      if (!prev || f.seq !== prev.f.seq || Math.abs(prev.at - at) > 5000) {
+        if (age <= 5 || !prev) mtFeedAdd(p[0], rssi, p[3], f, age);
+      }
+      const m = mt.paired.find(x => x.mac === p[0]);
+      if (m) { m.heard = true; m.rssi = rssi; }
+      mtPaintPaired();
+      return true;
+    }
+    case 'SCAN_DEV':
+    case 'SCAN': {
+      const p = val.split(',');
+      if (p.length < 6) return true;
+      mt.found.set(p[0], { mac: p[0], kind: p[1], node: +p[2] || 0, rssi: +p[3], name: p[4] === '-' ? '' : p[4], paired: p[5] === '1' });
+      mtPaintFound();
+      return true;
+    }
+    case 'SCAN_END':
+      mtScanDone(`${val} meter${val === '1' ? '' : 's'} heard`);
+      return true;
+    case 'METER_WAIT': {
+      if (val.startsWith('DONE')) {
+        const f = mtFields(val.split(',').slice(1));
+        log(`Meter wait over: ${f.frames} new meter frame(s) heard during it; uploading ${f.events} event(s) and ${f.pending} meter frame(s)`);
+        mt.summary.hold = '0';
+      } else {
+        const p = val.split(',');
+        log(`Listening ${p[0]} s for the meters' reports of this train before uploading`);
+        mt.summary.hold = '1';
+      }
+      mtPaintSummary();
+      return true;
+    }
+    case 'CFG_METER_LISTEN': mt.summary.listen = val; mtPaintSummary(); return false;
+    case 'CFG_METER_WAIT_S': mt.summary.wait = val; mtPaintSummary(); return false;
+    case 'OK':
+      if (val.startsWith('METER_SCAN,')) { mtScanStart(+val.split(',')[1] || mt.scanS); }
+      return false;
+    case 'ERR':
+      if (val.startsWith('METER_SCAN')) mtScanDone('Scan refused: ' + val);
+      return false;
+    default:
+      return false;
+  }
+}
+
+function mtScanStart(seconds) {
+  mt.scanS = seconds;
+  mt.scanEnd = Date.now() + seconds * 1000;
+  $('mt-scan-bar').hidden = false;
+  $('mt-scan').disabled = true;
+  clearInterval(mt.scanTimer);
+  mt.scanTimer = setInterval(() => {
+    const left = Math.max(0, mt.scanEnd - Date.now());
+    $('mt-scan-fill').style.width = (100 * (1 - left / (seconds * 1000))).toFixed(1) + '%';
+    setTxt('mt-scan-r', `scanning… ${Math.ceil(left / 1000)} s left · ${mt.found.size} heard`, '');
+    if (left <= 0 && Date.now() - mt.scanEnd > 8000) mtScanDone('No answer at the end of the scan; press Scan again.');
+  }, 250);
+  mtPaintFound();
+}
+function mtScanDone(msg) {
+  clearInterval(mt.scanTimer); mt.scanTimer = null; mt.scanEnd = 0;
+  $('mt-scan-bar').hidden = true; $('mt-scan').disabled = false;
+  setTxt('mt-scan-r', msg, '');
+  mtPaintFound();
+}
+
+const mtMac = s => {
+  const h = String(s || '').replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+  return h.length === 12 ? h.match(/../g).join(':') : null;
+};
+const mtLabelOk = s => /^[\x20-\x7E]*$/.test(s) && !/[",\\]/.test(s) && s.length <= 23;
+
+async function mtCmd(cmd, resultId) {
+  try { await send(cmd); return true; }
+  catch (e) { if (resultId) setTxt(resultId, e.message || String(e), 'var(--crit)'); return false; }
+}
+async function mtRefresh() {
+  if (!Link.connected) return;
+  await mtCmd('GET_METERS');
+}
+async function mtPair(mac, kind, label, resultId) {
+  const k = kind === 'TILT' || kind === 'VIB' ? kind : '';
+  const cmd = 'ADD_METER=' + mac + (label || k ? ',' + (label || '') : '') + (k ? ',' + k : '');
+  setTxt(resultId, 'pairing…', '');
+  if (await mtCmd(cmd, resultId)) {
+    setTxt(resultId, `${mac} paired`, 'var(--good)');
+    await mtRefresh();
+  }
+}
+
+$('mt-scan').onclick = async () => {
+  if (!Link.connected) { setTxt('mt-scan-r', 'Connect to the node first', 'var(--warn)'); return; }
+  const s = +$('mt-scan-s').value;
+  mt.found.clear();
+  mt.scanS = s;
+  setTxt('mt-scan-r', 'starting…', '');
+  if (!(await mtCmd('METER_SCAN=' + s, 'mt-scan-r'))) return;
+  if (!mt.scanEnd) mtScanStart(s);
+};
+$('mt-add').onclick = () => {
+  const mac = mtMac($('mt-mac').value);
+  const label = $('mt-label').value.trim();
+  if (!mac) { setTxt('mt-add-r', 'A MAC address is 12 hex digits, e.g. 60:A4:23:02:CA:55', 'var(--crit)'); return; }
+  if (!mtLabelOk(label)) { setTxt('mt-add-r', 'Label: up to 23 plain characters, no commas, quotes or backslashes', 'var(--crit)'); return; }
+  if (!Link.connected) { setTxt('mt-add-r', 'Connect to the node first', 'var(--warn)'); return; }
+  mtPair(mac, $('mt-kind').value, label, 'mt-add-r');
+};
+$('mt-save').onclick = async () => {
+  const wait = parseInt($('mt-wait').value, 10);
+  if (!(wait >= 0 && wait <= 60)) { setTxt('mt-save-r', 'Wait must be 0–60 s', 'var(--crit)'); return; }
+  setTxt('mt-save-r', 'saving…', '');
+  if (await mtCmd('SET_CFG_METER_LISTEN=' + $('mt-listen').value, 'mt-save-r')
+      && await mtCmd('SET_CFG_METER_WAIT_S=' + wait, 'mt-save-r')) {
+    setTxt('mt-save-r', 'saved on the node', 'var(--good)');
+    mtRefresh();
+  }
+};
+$('mt-refresh').onclick = () => mtRefresh();
+$('mt-live').onchange = e => { if (Link.connected) mtCmd('METER_WATCH=' + (e.target.checked ? '1' : '0')); };
+$('mt-clear').onclick = async () => {
+  if (!mt.paired.length) return;
+  if (!confirm(`Remove all ${mt.paired.length} paired meters from this node? Their frames not yet uploaded are dropped.`)) return;
+  if (await mtCmd('CLEAR_METERS=YES', 'mt-add-r')) mtRefresh();
+};
+$('mt-found').onclick = e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.mtPair) mtPair(b.dataset.mtPair, b.dataset.kind, '', 'mt-scan-r');
+  if (b.dataset.mtUse) {
+    $('mt-mac').value = b.dataset.mtUse;
+    $('mt-kind').value = ['TILT', 'VIB'].includes(b.dataset.kind) ? b.dataset.kind : 'ANY';
+    $('mt-label').focus();
+    setTxt('mt-add-r', 'Add a label, then Pair meter', '');
+  }
+};
+$('mt-paired').onclick = async e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.mtRead) mtCmd('GET_METER=' + b.dataset.mtRead);
+  if (b.dataset.mtLabel) {
+    const m = mt.paired.find(x => x.mac === b.dataset.mtLabel);
+    const label = prompt('Label for ' + b.dataset.mtLabel + ' (up to 23 characters, no commas or quotes):', m ? m.label : '');
+    if (label === null) return;
+    if (!mtLabelOk(label.trim())) { alert('Up to 23 plain characters, no commas, quotes or backslashes.'); return; }
+    if (await mtCmd('METER_LABEL=' + b.dataset.mtLabel + ',' + label.trim())) mtRefresh();
+  }
+  if (b.dataset.mtDel) {
+    if (!confirm('Stop relaying ' + b.dataset.mtDel + '? Its frames not yet uploaded are dropped. The cloud device and its history stay.')) return;
+    if (await mtCmd('DEL_METER=' + b.dataset.mtDel)) mtRefresh();
+  }
+};
+/* Opening the tab reads the list and turns the live feed on; while it is
+ * open, the list is re-read every 20 s and the ages tick every second. */
+document.querySelector('nav.tabs button[data-tab="t-meters"]').addEventListener('click', () => {
+  if (Link.connected) {
+    mtRefresh().then(() => { if ($('mt-live').checked) mtCmd('METER_WATCH=1'); });
+  }
+  clearInterval(mt.refresh);
+  mt.refresh = setInterval(() => {
+    if ($('t-meters').hidden || !Link.connected) return;
+    if (!mt.scanEnd) mtRefresh();
+  }, 20000);
+  clearInterval(mt.tick);
+  mt.tick = setInterval(() => {
+    if ($('t-meters').hidden) return;
+    document.querySelectorAll('#t-meters [data-ago]').forEach(el => { el.textContent = mtAgo(+el.dataset.ago); });
+  }, 1000);
+});
+
 function loadDemo() {
   demoMode = true; setConnUI(false);
   $('conn-t').textContent = 'Demo data (not connected)';
@@ -4798,6 +5566,19 @@ function loadDemo() {
 
   /* A demo profile pair, so the chart shows the shape of a real decision
    * offline: a quiet site around 30 mg and a train peaking near 500. */
+  [
+   'METER=0,60:A4:23:02:CA:55,TILT,182869,Pier 3 east,1,42,-68,1840,212,0',
+   'METER_LAST=60:A4:23:02:CA:55,42,-68,TILT,node=182869,seq=211,kind=0,x=0.5972,y=-0.0688,z=89.3989,t=30.04,vbat=3600,flags=0x08',
+   'METER=1,60:A4:23:02:B5:99,VIB,177561,Span 2 mid,1,7,-74,964,118,0',
+   'METER_LAST=60:A4:23:02:B5:99,7,-74,VIB,node=177561,seq=44,mode=PPV,max=3.18,records=2,alert=0,event=1,ts=1785000420,t=29.20,vbat=3580',
+   'METER=2,60:A4:23:02:C0:11,ANY,0,North abutment,0,-,0,0,0,0',
+   'METERS_END=3,pending=6,dropped=0,listen=1,scanning=1,wait=10,watch=1,hold=0',
+   'SCAN_DEV=60:A4:23:02:CA:55,TILT,182869,-66,TILT-182869,1',
+   'SCAN_DEV=60:A4:23:02:B5:99,VIB,177561,-73,VIB-177561,1',
+   'SCAN_DEV=60:A4:23:02:D7:20,VIB,177604,-81,VIB-177604,0',
+   'SCAN_END=3',
+  ].forEach(handleLine);
+
   ['PROFILE=1,BASELINE,60,25'].forEach(handleLine);
   handleLine('PROFILE_SEC=0,' + Array.from({length:10},(_,i)=>22+((i*7)%13)).join(','));
   handleLine('PROFILE_SEC=10,'+ Array.from({length:10},(_,i)=>19+((i*5)%15)).join(','));
@@ -4815,7 +5596,8 @@ function loadDemo() {
     const d = {CAPACITY_KN:150,MV_PER_V:2,PGA_GAIN:128,ADC_CHOP:0,RAIL_GATE:0,RAIL_MODE:1,RAIL_SETTLE_MS:50,OUTPUT_QUANTITY:0,GAUGE_FACTOR:2,BRIDGE:0,STRAIN_ZERO_MV_V:0,
       ACTIVITY_MG:118,INACTIVITY_MG:59,ACTIVITY_TIME_MS:120,INACTIVITY_MS:2000,
       WAKE_CONFIRM_MS:400,PROFILE_BASE_S:60,PROFILE_TRAIN_S:60,
-      TRAIN_TIMEOUT_S:180,LOAD_RATE_HZ:100,ACCEL_RATE_HZ:25,
+      TRAIN_TIMEOUT_S:120,LOAD_RATE_HZ:100,ACCEL_RATE_HZ:25,
+      TRIG_SOURCE:1,TRIG_DELTA_KN:5,TRIG_STOP_KN:0,TRIG_COUNT:3,TRIG_BASE_TAU_S:300,TRIG_IDLE_HZ:10,WAVE_ENABLE:1,
       LOAD_END_FRAC:0.1,
       ENABLE_BASELINE:1,BASELINE_INT_MIN:30,BASELINE_DUR_S:5,
       ENABLE_BLE:1,ENABLE_LTE:1,ACCEL_AXIS_MASK:0,HEALTH_CHECK_S:60,
