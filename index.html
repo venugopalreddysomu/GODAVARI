@@ -825,12 +825,15 @@ ol.steps b{color:var(--text-primary)}
  <div class="card" id="lt-card" style="margin-bottom:14px">
    <h2>Load-cell trigger (AD7193)</h2>
    <p class="sub">
-     The node tracks the resting load &mdash; the <b>baseline</b> &mdash; and
-     starts a capture when the load moves more than the <b>start threshold</b>
-     away from it. The capture ends when the load is back within the
-     <b>stop threshold</b> of the baseline for the quiet time, and the trigger
-     re-arms only once it is inside that again. The gap between the two is the
-     hysteresis that keeps one train from being cut into several. Used when
+     With <b>Absolute load</b> (firmware 0.13+, the default) the thresholds are
+     loads: a capture starts when the load reaches the <b>start threshold</b>
+     and ends once it has stayed below the <b>stop threshold</b> for 5 s. Going
+     back over the stop inside that time is the same train &mdash; the gap
+     between the two is the hysteresis that keeps one train from being cut
+     into several. With a 45 kN dead load and trains adding 10&ndash;15 kN:
+     start 49, stop 47. Every recording keeps 5 s from before the start and
+     5 s after the end. With <b>Change from the baseline</b> the thresholds are
+     measured from the tracked resting load instead. Used when
      <i>What starts a capture</i> is <b>Load cell</b>.
    </p>
    <div class="lv-head" style="margin-top:9px">
@@ -868,14 +871,19 @@ ol.steps b{color:var(--text-primary)}
 
    <h3 class="lv-h">Thresholds</h3>
    <div class="cfg-row">
+     <label for="lt-level">Thresholds are</label>
+     <select id="lt-level"><option value="1">Absolute</option><option value="0">Relative</option></select>
+     <span class="rng" id="lt-level-sub">start/stop are loads</span>
+   </div>
+   <div class="cfg-row">
      <label for="lt-start">Start threshold</label>
      <input id="lt-start" type="number" step="0.1" min="0.05" max="1000">
-     <span class="rng">kN above (or below) the baseline &middot; 0.05&ndash;1000</span>
+     <span class="rng" id="lt-start-rng">kN &middot; starts at this load and above</span>
    </div>
    <div class="cfg-row">
      <label for="lt-stop">Stop threshold</label>
      <input id="lt-stop" type="number" step="0.1" min="0" max="1000">
-     <span class="rng">kN &middot; must be below start &middot; 0 = automatic (half the start, or 10% of the train&rsquo;s peak)</span>
+     <span class="rng" id="lt-stop-rng">kN &middot; ends 5 s below this &middot; under start &middot; 0 = auto</span>
    </div>
    <div class="cfg-row">
      <label for="lt-count">Confirm samples</label>
@@ -2124,10 +2132,13 @@ const CFG = [
  ['TRIG_SOURCE','What starts a capture','sel',0,0,'',
   '<b>Load cell</b> watches the bridge itself: a slow idle scan tracks the resting load, and a capture starts when the load moves the threshold below away from it. Start AND end are both decided by the load; no accelerometer is needed, and none is used even if fitted. The mains design, and the default on the BG24 board. <b>Accelerometer</b> is the battery design: the ADXL367 wakes the node on motion. Applies at once; Monitoring re-arms on the new source.',
   ['Accelerometer (ADXL367)','Load cell']],
+ ['TRIG_LEVEL','Thresholds are','sel',0,0,'',
+  '<b>Absolute load</b> (firmware 0.13+): the start and stop thresholds are loads - a capture starts when the load reaches the start and ends 5 s after it is back below the stop. <b>Change from the baseline</b>: they are measured from the tracked resting load, either way. Absolute suits a bearing whose dead load is known and steady.',
+  ['Change from the baseline','Absolute load']],
  ['TRIG_DELTA_KN','Start threshold','num',0.05,1000,'kN',
-  'How far the load must move from its resting baseline to count as a train. Measured from a moving baseline, never from zero, because a bearing&rsquo;s dead load is most of the reading and drifts with temperature. Choose it with TRIG_TEST in Setup: above the idle noise, well below what a train adds.'],
+  'Absolute: the load at which a train starts a capture - above the dead load and its idle noise, well below what a train brings (45 kN dead load, 55-60 kN trains: 49). Relative: how far the load must move from its resting baseline. Choose it with Watch load in Setup.'],
  ['TRIG_STOP_KN','Stop threshold','num',0,1000,'kN',
-  'How close to the baseline the load must come back for the capture to end (for the quiet time), and for the trigger to re-arm afterwards. Must be below the start threshold: the gap between them keeps one train from being cut into several. 0 is automatic - half the start threshold, or 10% of the passage&rsquo;s own peak excursion, whichever is wider.'],
+  'Absolute: the load the passage ends below (after 5 s there) and the trigger re-arms below (47 for the example above). Relative: how close to the baseline the load must come back. Must be below the start threshold: the gap between them keeps one train from being cut into several. 0 is automatic - halfway from the baseline to the start (absolute), or half the start (relative).'],
  ['TRIG_COUNT','Trigger confirmation','num',1,100,'samples',
   'Consecutive idle-scan samples beyond the threshold before a capture starts. At 10 Hz, 3 is 0.3 s - enough to ignore a single spike, short enough that the idle samples leading up to it, kept as the pre-trigger block, still hold the start of the passage.'],
  ['TRIG_BASE_TAU_S','Baseline time constant','num',10,36000,'s',
@@ -2141,7 +2152,7 @@ const CFG = [
  ['METER_LISTEN','Listen for paired meters','bool',0,0,'',
   'Keeps the Bluetooth scanner running for the Tilt T1 and Vibe V1 meters paired on the Meters tab, and uploads what they broadcast as devices of their own. On by default where the node is on mains. Pair, scan and see the latest readings on the Meters tab.'],
  ['METER_WAIT_S','Wait for the meters after a train','num',0,60,'s',
-  'After a train, the upload is held this long while the node keeps listening, so a vibration meter&rsquo;s event report of the same train travels in the same session as the load. Set the Vibe V1&rsquo;s event report (evt_rpt_s) a few seconds shorter than this. 0 uploads at once.'],
+  'After a train, the upload is held up to this long while the node keeps listening, so a Vibe V1&rsquo;s report of the same train travels in the same session as the load. It ends early once every paired Vibe V1 has sent the report of its capture (firmware 0.14+, Vibe 1.1.1 in PSA with psa_rpt on). 0 uploads at once.'],
 
  ['Acquisition', null, null, null, null, null],
  ['TRACE_ENABLE','Send passage shape','bool',0,1,'',
@@ -3624,9 +3635,10 @@ function mirrorToPanels(k, v) {
   if (k === 'BRIDGE')           $('o-bridge').value = String(parseInt(v,10) || 0);
   if (k === 'STRAIN_ZERO_MV_V') $('o-zero').value   = v;
   /* The trigger card keeps its own copy: it draws baseline +/- these. */
-  const lmap = {TRIG_DELTA_KN:'lt-start', TRIG_STOP_KN:'lt-stop', TRIG_COUNT:'lt-count', TRIG_BASE_TAU_S:'lt-tau'};
+  const lmap = {TRIG_DELTA_KN:'lt-start', TRIG_STOP_KN:'lt-stop', TRIG_COUNT:'lt-count', TRIG_BASE_TAU_S:'lt-tau', TRIG_LEVEL:'lt-level'};
   if (lmap[k] && $(lmap[k])) {
-    $(lmap[k]).value = v;
+    $(lmap[k]).value = k === 'TRIG_LEVEL' ? String(parseInt(v, 10) === 1 ? 1 : 0) : v;
+    if (k === 'TRIG_LEVEL')    lt.abs   = parseInt(v, 10) === 1;
     if (k === 'TRIG_DELTA_KN') lt.start = num(v);
     if (k === 'TRIG_STOP_KN')  lt.stop  = num(v) || 0;
     if (k === 'TRIG_COUNT')    lt.count = num(v);
@@ -4453,13 +4465,27 @@ setInterval(paintLiveState, 1000);
  * rows. The levels drawn are baseline +/- threshold, the same comparison the
  * firmware makes; a load below the baseline triggers too. */
 const LT_WINDOW_MS = 60000, LT_IDLE_GUARD_MS = 10000;
-const lt = { hist: [], base: null, load: null, start: null, stop: null, count: null,
+/* abs: TRIG_LEVEL=ABS. False until the node says so - firmware before 0.13
+ * has no TRIG_LEVEL and is always relative. */
+const lt = { hist: [], base: null, load: null, start: null, stop: null, count: null, abs: false,
              watching: false, poll: null, idleMax: 0, idleN: 0, peak: 0, fired: null, state: '—',
              beyond: [], pend: [] };
 
 /* The stop the firmware uses when TRIG_STOP_KN is 0, for the re-arm test.
  * The end-of-capture test may sit higher: 10% of the passage's own peak. */
 const ltStopEff = () => (lt.stop > 0 ? lt.stop : (lt.start !== null ? lt.start / 2 : null));
+/* The loads the trigger acts at: absolute, or baseline + threshold. Null
+ * while what they depend on is unknown. */
+function ltLevels() {
+  const b = lt.base, s = lt.start;
+  if (s === null) return { start: null, stop: null };
+  if (lt.abs) {
+    const stop = lt.stop > 0 ? lt.stop : (b !== null && b < s ? b + (s - b) / 2 : 0.95 * s);
+    return { start: s, stop };
+  }
+  const p = ltStopEff();
+  return { start: b !== null ? b + s : null, stop: (b !== null && p !== null) ? b + p : null };
+}
 
 function ltSample(load, base, over) {
   if (load === null) return;
@@ -4471,7 +4497,7 @@ function ltSample(load, base, over) {
   if (lt.base !== null) {
     const exc = Math.abs(load - lt.base);
     lt.peak = Math.max(lt.peak, exc);
-    if (lt.start !== null && exc >= lt.start) lt.beyond.push(now);
+    if (lt.start !== null && (lt.abs ? load >= lt.start : exc >= lt.start)) lt.beyond.push(now);
     while (lt.beyond.length && now - lt.beyond[0] > LT_WINDOW_MS) lt.beyond.shift();
     /*
      * Idle noise is judged LT_IDLE_GUARD_MS late: a sample counts only if no
@@ -4499,14 +4525,31 @@ function ltPaint() {
   setTxt('lt-base', fmt(b, 3));
   const exc = (lt.load !== null && b !== null) ? lt.load - b : null;
   setTxt('lt-exc', exc === null ? '—' : (exc >= 0 ? '+' : '') + exc.toFixed(3));
-  const beyond = exc !== null && s !== null && Math.abs(exc) >= s;
-  setTxt('lt-exc-sub', exc === null ? '—'
-    : beyond ? 'beyond the start threshold' : (p !== null && Math.abs(exc) < p ? 'inside the stop band' : 'between stop and start'),
+  const L = ltLevels();
+  let beyond, inside;
+  if (lt.abs) {
+    beyond = lt.load !== null && L.start !== null && lt.load >= L.start;
+    inside = lt.load !== null && L.stop !== null && lt.load < L.stop;
+  } else {
+    beyond = exc !== null && s !== null && Math.abs(exc) >= s;
+    inside = exc !== null && p !== null && Math.abs(exc) < p;
+  }
+  setTxt('lt-exc-sub', (lt.load === null || L.start === null) ? '—'
+    : beyond ? 'at or over the start threshold' : (inside ? 'below the stop: at rest' : 'between stop and start'),
     beyond ? 'var(--warn)' : '');
-  setTxt('lt-start-at', (b !== null && s !== null) ? (b + s).toFixed(2) : '—');
-  setTxt('lt-start-sub', s !== null ? `baseline ± ${s.toFixed(2)}` + (b !== null ? ` (or below ${(b - s).toFixed(2)})` : '') : 'baseline ± start');
-  setTxt('lt-stop-at', (b !== null && p !== null) ? (b + p).toFixed(2) : '—');
-  setTxt('lt-stop-sub', p !== null ? `baseline ± ${p.toFixed(2)}` + (lt.stop > 0 ? '' : ' · automatic') : 'baseline ± stop');
+  setTxt('lt-start-at', L.start !== null ? L.start.toFixed(2) : '—');
+  setTxt('lt-stop-at', L.stop !== null ? L.stop.toFixed(2) : '—');
+  if (lt.abs) {
+    setTxt('lt-start-sub', 'absolute: this load and above');
+    setTxt('lt-stop-sub', 'absolute: ends 5 s below this' + (lt.stop > 0 ? '' : ' · automatic'));
+  } else {
+    setTxt('lt-start-sub', s !== null ? `baseline ± ${s.toFixed(2)}` + (b !== null ? ` (or below ${(b - s).toFixed(2)})` : '') : 'baseline ± start');
+    setTxt('lt-stop-sub', p !== null ? `baseline ± ${p.toFixed(2)}` + (lt.stop > 0 ? '' : ' · automatic') : 'baseline ± stop');
+  }
+  setTxt('lt-level-sub', lt.abs ? 'start/stop are loads' : 'start/stop are changes from the baseline');
+  setTxt('lt-start-rng', lt.abs ? 'kN · starts at this load and above' : 'kN above (or below) the baseline');
+  setTxt('lt-stop-rng', lt.abs ? 'kN · ends 5 s below this · under start · 0 = auto'
+                               : 'kN · back within this · under start · 0 = auto');
   setTxt('lt-fired', lt.fired === null ? '—' : String(lt.fired));
   setTxt('lt-state', lt.state);
   $('lt-badge').classList.toggle('on', lt.watching);
@@ -4525,7 +4568,10 @@ function ltChart() {
   const b = lt.base, s = lt.start, p = ltStopEff();
   let lo = Infinity, hi = -Infinity;
   for (const q of pts) { lo = Math.min(lo, q.load); hi = Math.max(hi, q.load); }
-  if (b !== null && s !== null) { lo = Math.min(lo, b - s); hi = Math.max(hi, b + s); }
+  const L = ltLevels();
+  if (lt.abs) {
+    if (L.start !== null) { lo = Math.min(lo, L.stop); hi = Math.max(hi, L.start); }
+  } else if (b !== null && s !== null) { lo = Math.min(lo, b - s); hi = Math.max(hi, b + s); }
   const pad = Math.max((hi - lo) * 0.1, 0.05);
   const y0 = lo - pad, y1 = hi + pad, H = 120, W = 600;
   const t1 = pts[pts.length - 1].t, t0 = t1 - LT_WINDOW_MS;
@@ -4533,8 +4579,11 @@ function ltChart() {
   const Y = v => H - ((v - y0) / (y1 - y0)) * H;
   const hl = (v, cls) => `<line class="${cls}" x1="0" x2="${W}" y1="${Y(v).toFixed(2)}" y2="${Y(v).toFixed(2)}"></line>`;
   let g = '';
-  if (b !== null) {
-    g += hl(b, 'mean');
+  if (b !== null) g += hl(b, 'mean');
+  if (lt.abs) {
+    if (L.start !== null) g += hl(L.start, 'lt-start');
+    if (L.stop !== null)  g += hl(L.stop, 'lt-stop');
+  } else if (b !== null) {
     if (s !== null) g += hl(b + s, 'lt-start') + hl(b - s, 'lt-start');
     if (p !== null) g += hl(b + p, 'lt-stop') + hl(b - p, 'lt-stop');
   }
@@ -4553,6 +4602,7 @@ function ltLine(key, val) {
     return true;
   }
   switch (key) {
+    case 'TRIG_LEVEL':    lt.abs = parseInt(val, 10) === 1; if ($('lt-level')) $('lt-level').value = lt.abs ? '1' : '0'; break;
     case 'TRIG_DELTA_KN': lt.start = num(val); break;
     case 'TRIG_STOP_KN':  lt.stop = num(val) || 0; break;
     case 'TRIG_COUNT':    lt.count = num(val); break;
@@ -4624,6 +4674,7 @@ $('lt-apply').onclick = async () => {
   try {
     /* Stop to 0 first: the node refuses a start at or below a set stop, and a
      * stop at or above the start, so this order is valid from any old pair. */
+    await send('SET_CFG_TRIG_LEVEL=' + ($('lt-level').value === '1' ? 'ABS' : 'REL'));
     await send('SET_CFG_TRIG_STOP_KN=0');
     await send('SET_CFG_TRIG_DELTA_KN=' + start);
     if (stop > 0) await send('SET_CFG_TRIG_STOP_KN=' + stop);
@@ -4641,6 +4692,19 @@ $('lt-suggest').onclick = () => {
   /* Four times the idle noise, at least 0.5 kN; stop at half of it, which
    * still clears the noise by two to one. */
   const start = Math.max(4 * lt.idleMax, 0.5);
+  const absNow = $('lt-level').value === '1';
+  if (absNow && lt.base === null) { setTxt('lt-result', 'No baseline yet - watch the load first', 'var(--warn)'); return; }
+  if (absNow) {
+    /* Loads, from what a train actually added: start at 35% of its rise and
+     * stop at 20%, each at least clear of the idle noise. A level a few noise
+     * widths over the dead load would follow every warm afternoon. */
+    if (!(lt.peak > start)) { setTxt('lt-result', 'Watch a train go over too - absolute thresholds are set from what it adds', 'var(--warn)'); return; }
+    const up = Math.max(0.35 * lt.peak, start), down = Math.max(0.20 * lt.peak, start / 2);
+    $('lt-start').value = (lt.base + up).toFixed(2);
+    $('lt-stop').value  = (lt.base + Math.min(down, up * 0.8)).toFixed(2);
+    setTxt('lt-result', `suggested from a train adding ${lt.peak.toFixed(2)} kN — press Apply to save`, 'var(--warn)');
+    return;
+  }
   $('lt-start').value = start.toFixed(2);
   $('lt-stop').value  = (start / 2).toFixed(2);
   let note = 'suggested — press Apply to save';
@@ -5218,7 +5282,7 @@ $('btn-theme').onclick = () => {
  *   METER_LAST=<mac>,<age_s>,<rssi>,<TILT|VIB>,k=v,...   (GET_METER, GET_METERS, live with METER_WATCH=1)
  *   METERS_END=<n>,pending=,dropped=,listen=,scanning=,wait=,watch=,hold=
  *   SCAN_DEV / SCAN=<mac>,<kind>,<node>,<rssi>,<name|->,<paired>   SCAN_END=<n>
- *   METER_WAIT=<s>,meters=<n> | METER_WAIT=DONE,frames=,pending=,events=
+ *   METER_WAIT=<s>,meters=<n> | METER_WAIT=DONE,frames=,pending=,events=[,reports=,waited=]
  * ═══════════════════════════════════════════════════════════════════════ */
 const mt = { paired: [], buf: [], last: {}, found: new Map(), summary: {}, scanTimer: null,
              scanEnd: 0, scanS: 0, feed: [], refresh: null, tick: null };
@@ -5262,7 +5326,9 @@ function mtReading(kind, f) {
     const unit = { PPV: 'mm/s', PGA: 'mg', PSA: 'mg', MTVV: 'dB' }[f.mode] || '';
     const flags = (f.event === '1' ? '<span class="mt-flag ev">EVENT</span>' : '')
                 + (f.alert === '1' ? '<span class="mt-flag al">ALERT</span>' : '');
-    const rec = f.records !== undefined ? ` · ${f.records} record${f.records === '1' ? '' : 's'}` : '';
+    const rec = f.full === '1'
+      ? ` · ${f.active} s analysed · ${f.windows} averaged · ${f.over} over threshold`
+      : (f.records !== undefined ? ` · ${f.records} record${f.records === '1' ? '' : 's'}` : '');
     return `${f.mode} max ${f.max} ${unit}${rec}${flags}<span class="sub">${extra}</span>`;
   }
   if (f.frame !== undefined) return `frame ${f.frame}${f.first ? ' · ' + f.first : ''}`;
@@ -5381,7 +5447,8 @@ function mtLine(key, val) {
     case 'METER_WAIT': {
       if (val.startsWith('DONE')) {
         const f = mtFields(val.split(',').slice(1));
-        log(`Meter wait over: ${f.frames} new meter frame(s) heard during it; uploading ${f.events} event(s) and ${f.pending} meter frame(s)`);
+        log(`Meter wait over${f.reports === '1' ? ` after ${f.waited} s — every Vibe V1 has reported this train` : ''}: `
+            + `${f.frames} new meter frame(s) heard during it; uploading ${f.events} event(s) and ${f.pending} meter frame(s)`);
         mt.summary.hold = '0';
       } else {
         const p = val.split(',');
@@ -5597,7 +5664,7 @@ function loadDemo() {
       ACTIVITY_MG:118,INACTIVITY_MG:59,ACTIVITY_TIME_MS:120,INACTIVITY_MS:2000,
       WAKE_CONFIRM_MS:400,PROFILE_BASE_S:60,PROFILE_TRAIN_S:60,
       TRAIN_TIMEOUT_S:120,LOAD_RATE_HZ:100,ACCEL_RATE_HZ:25,
-      TRIG_SOURCE:1,TRIG_DELTA_KN:5,TRIG_STOP_KN:0,TRIG_COUNT:3,TRIG_BASE_TAU_S:300,TRIG_IDLE_HZ:10,WAVE_ENABLE:1,
+      TRIG_SOURCE:1,TRIG_LEVEL:1,TRIG_DELTA_KN:49,TRIG_STOP_KN:47,TRIG_COUNT:3,TRIG_BASE_TAU_S:300,TRIG_IDLE_HZ:10,WAVE_ENABLE:1,
       LOAD_END_FRAC:0.1,
       ENABLE_BASELINE:1,BASELINE_INT_MIN:30,BASELINE_DUR_S:5,
       ENABLE_BLE:1,ENABLE_LTE:1,ACCEL_AXIS_MASK:0,HEALTH_CHECK_S:60,
