@@ -2126,7 +2126,7 @@ const CFG = [
  ['PROFILE_TRAIN_S','Train profile length','num',5,120,'s',
   'How long a train profile runs. Long enough for the slowest freight that crosses this span.'],
  ['TRAIN_TIMEOUT_S','Capture timeout','num',5,3600,'s',
-  'Hard stop on one capture. A seized bearing or a failed-high cell would otherwise capture forever. The full-rate waveform holds 12,000 samples - 120 s at 100 Hz, 240 s at 50 Hz - so a longer capture keeps its summary and trace and its waveform is marked truncated. Set it to the slowest train this span sees, with margin.'],
+  'Hard stop on one capture. A seized bearing or a failed-high cell would otherwise capture forever. 170 s by default: with the 10 s before the trigger a load-triggered event is 180 s at most, and it already includes the 10 s after the load is back below the stop level. The waveform is 100 Hz up to 120 s; a longer passage is kept whole at 50 Hz (25 Hz past 240 s). Set it to the slowest train this span sees, with margin.'],
 
  ['Load-cell trigger & waveform', null, null, null, null, null],
  ['TRIG_SOURCE','What starts a capture','sel',0,0,'',
@@ -2168,9 +2168,9 @@ const CFG = [
 
  ['Reporting', null, null, null, null, null],
  ['ENABLE_BASELINE','Periodic idle sample','bool',0,0,'',
-  'Records the bridge doing nothing on an interval. Deterioration shows in the quiet behaviour long before it changes a passage peak.'],
+  'Records the bridge doing nothing on an interval and uploads it at once (Monitoring): the idle load between trains, as a periodic event the dashboard shows as Idle load. Deterioration shows in the quiet behaviour long before it changes a passage peak. A train has priority: one arriving during the sample abandons it and is captured, and the sample is taken again once the train has gone.'],
  ['BASELINE_INT_MIN','Idle sample interval','num',1,1440,'min',
-  'How often the idle sample is taken.'],
+  'How often the idle sample is taken; 30 min by default. The first comes 2 min after Monitoring is armed, then one every interval (timed from power-up, so it runs before the clock is set too), never within a minute of a train.'],
  ['BASELINE_DUR_S','Idle sample length','num',1,60,'s',
   'Length of each idle recording. 5 s at 50 Hz is 250 samples — ample for a mean, an RMS and a noise floor, and far cheaper than a full capture.'],
  ['ENABLE_BLE','BLE enabled','bool',0,0,
